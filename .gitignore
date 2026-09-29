@@ -1,0 +1,41 @@
+# Dependencias de Node.js
+node_modules/
+*/node_modules/
+
+# Variables de entorno y credenciales sensibles (NUNCA SUBIR A GITHUB)
+.env
+.env.*
+!.env.example
+*.env
+backend-node/.env
+
+# Logs y depuración
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Archivos del Sistema Operativo
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editores e IDEs
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Archivos temporales y binarios de bases de datos locales
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+database/*.db
+database/*.db-shm
+database/*.db-wal

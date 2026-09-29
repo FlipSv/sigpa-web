@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SIGPA — Panel de Control</title>
+    <meta name="description" content="Sistema de Gestión de Prácticas Académicas — UDI. Panel de control institucional por rol.">
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- Styles -->
+    <link rel="stylesheet" href="css/style.css">
+
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<div class="dashboard-layout">
+
+    <!-- ═══════════════════════════════════════════════
+         SIDEBAR
+         ═══════════════════════════════════════════════ -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-brand">
+                <div class="sidebar-brand-logo">
+                    <!-- SIGPA Logo Icon -->
+                    <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                        <path d="M2 17l10 5 10-5"/>
+                        <path d="M2 12l10 5 10-5"/>
+                    </svg>
+                </div>
+                <div class="sidebar-brand-text">
+                    <h2>SIGPA</h2>
+                    <span>UDI • 2026-II</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Nav injected by JS per role -->
+        <nav class="sidebar-nav" id="sidebarNav">
+            <!-- Skeleton nav -->
+            <div style="padding:8px 10px;">
+                <div class="skeleton" style="height:10px;width:60%;margin-bottom:14px;"></div>
+                <div class="skeleton" style="height:34px;border-radius:8px;margin-bottom:6px;"></div>
+                <div class="skeleton" style="height:34px;border-radius:8px;margin-bottom:6px;"></div>
+                <div class="skeleton" style="height:34px;border-radius:8px;"></div>
+            </div>
+        </nav>
+
+        <div class="sidebar-footer">
+            <div class="user-profile">
+                <div class="user-avatar" id="navUserAvatar" style="background:linear-gradient(135deg,#4f46e5,#818cf8);">?</div>
+                <div class="user-info">
+                    <span class="user-name" id="navUserName">Cargando...</span>
+                    <span class="user-role-badge" id="navUserRole">—</span>
+                </div>
+            </div>
+            <button onclick="logout()" class="btn-logout-icon" title="Cerrar Sesión" id="btn-logout">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                    <polyline points="16 17 21 12 16 7"/>
+                    <line x1="21" y1="12" x2="9" y2="12"/>
+                </svg>
+            </button>
+        </div>
+    </aside>
+
+    <!-- ═══════════════════════════════════════════════
+         MAIN WRAPPER
+         ═══════════════════════════════════════════════ -->
+    <div class="main-wrapper">
+
+        <!-- Top Bar -->
+        <header class="topbar" id="topbar">
+            <div class="topbar-left">
+                <div class="topbar-title">
+                    <h1 id="pageTitle">Panel de Control</h1>
+                    <small id="pageSubtitle">SIGPA — UDI 2026-II</small>
+                </div>
+            </div>
+
+            <!-- Search -->
+            <div class="topbar-search">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                    <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+                </svg>
+                <input type="text" placeholder="Buscar..." id="topbarSearch" autocomplete="off">
+                <span style="font-size:10.5px;color:#cbd5e1;font-weight:600;white-space:nowrap;">⌘F</span>
+            </div>
+
+            <div class="topbar-actions">
+                <!-- Period Selector -->
+                <div class="topbar-period" id="topbarPeriod" title="Periodo académico activo">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                        <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/>
+                        <line x1="3" y1="10" x2="21" y2="10"/>
+                    </svg>
+                    2026-II
+                </div>
+
+                <!-- Notifications -->
+                <div class="topbar-icon-btn" id="btn-notifs" title="Notificaciones">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                        <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                    </svg>
+                    <span class="notif-dot" id="notifDot" style="display:none;"></span>
+                </div>
+
+                <!-- Role Badge -->
+                <span id="roleBadge" class="topbar-badge badge-director">DIRECTOR</span>
+
+                <!-- User -->
+                <div class="topbar-user" id="topbarUser">
+                    <div class="topbar-avatar" id="topbarAvatar" style="background:linear-gradient(135deg,#4f46e5,#818cf8);">?</div>
+                    <div class="topbar-user-info">
+                        <small id="topbarUserName">Cargando</small>
+                        <span id="topbarUserRole">—</span>
+                    </div>
+                </div>
+
+                <!-- Quick Action (injected by role) -->
+                <div id="topbarCTA"></div>
+            </div>
+        </header>
+
+        <!-- ─── Content Area ─── -->
+        <main class="content-area" id="mainView">
+            <!-- Dynamic content injected by app.js -->
+            <div class="kpi-row">
+                <div class="kpi-card kpi-accent" style="animation-delay:.05s">
+                    <div class="kpi-header">
+                        <span class="kpi-label">Cargando</span>
+                        <div class="kpi-icon kpi-icon-accent">⏳</div>
+                    </div>
+                    <div class="kpi-value skeleton" style="height:36px;width:80px;border-radius:6px;"></div>
+                    <div class="kpi-footer">
+                        <span class="kpi-sub skeleton" style="height:12px;width:140px;border-radius:4px;"></span>
+                    </div>
+                </div>
+                <div class="kpi-card kpi-success" style="animation-delay:.10s">
+                    <div class="kpi-header">
+                        <span class="kpi-label">Cargando</span>
+                        <div class="kpi-icon kpi-icon-success">⏳</div>
+                    </div>
+                    <div class="kpi-value skeleton" style="height:36px;width:80px;border-radius:6px;"></div>
+                    <div class="kpi-footer">
+                        <span class="kpi-sub skeleton" style="height:12px;width:140px;border-radius:4px;"></span>
+                    </div>
+                </div>
+                <div class="kpi-card kpi-warning" style="animation-delay:.15s">
+                    <div class="kpi-header">
+                        <span class="kpi-label">Cargando</span>
+                        <div class="kpi-icon kpi-icon-warning">⏳</div>
+                    </div>
+                    <div class="kpi-value skeleton" style="height:36px;width:80px;border-radius:6px;"></div>
+                    <div class="kpi-footer">
+                        <span class="kpi-sub skeleton" style="height:12px;width:140px;border-radius:4px;"></span>
+                    </div>
+                </div>
+                <div class="kpi-card kpi-purple" style="animation-delay:.20s">
+                    <div class="kpi-header">
+                        <span class="kpi-label">Cargando</span>
+                        <div class="kpi-icon kpi-icon-purple">⏳</div>
+                    </div>
+                    <div class="kpi-value skeleton" style="height:36px;width:80px;border-radius:6px;"></div>
+                    <div class="kpi-footer">
+                        <span class="kpi-sub skeleton" style="height:12px;width:140px;border-radius:4px;"></span>
+                    </div>
+                </div>
+            </div>
+            <div class="chart-row-2col">
+                <div class="chart-card" style="min-height:280px;"><div class="chart-card-body" style="align-items:center;justify-content:center;"><div class="skeleton" style="width:100%;height:200px;border-radius:8px;"></div></div></div>
+                <div class="chart-card" style="min-height:280px;"><div class="chart-card-body" style="align-items:center;justify-content:center;"><div class="skeleton" style="width:100%;height:200px;border-radius:8px;"></div></div></div>
+            </div>
+        </main>
+    </div>
+</div>
+
+<!-- Modals Container -->
+<div id="modalContainer"></div>
+
+<script src="js/app.js"></script>
+</body>
+</html>

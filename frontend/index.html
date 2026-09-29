@@ -1,0 +1,1006 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SIGPA — Portal Institucional de Prácticas Académicas | UDI</title>
+    <meta name="description" content="Sistema Integral de Gestión de Prácticas Académicas (SIGPA) — Universidad de Investigación y Desarrollo (UDI). Portal de acceso institucional.">
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        /* ── Reset & Base ────────────────────────────────────────── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body { height: 100%; }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f8fafc;
+            color: #1e293b;
+            -webkit-font-smoothing: antialiased;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ── Split Layout Container ─────────────────────────────── */
+        .split-container {
+            display: flex;
+            min-height: 100vh;
+            width: 100%;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* ══════════════════════════════════════════════════════════
+           COLUMNA IZQUIERDA: IDENTIDAD INSTITUCIONAL (45% - 50%)
+           ══════════════════════════════════════════════════════════ */
+        .brand-side {
+            flex: 1 1 48%;
+            background: linear-gradient(135deg, #0d2247 0%, #17386d 70%, #1e4585 100%);
+            color: #ffffff;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 52px 64px;
+            position: relative;
+            z-index: 5;
+        }
+
+        /* Sutil resplandor con paleta institucional UDI (Azul Profundo & Naranja) */
+        .brand-side::before {
+            content: '';
+            position: absolute;
+            top: -12%;
+            left: -10%;
+            width: 550px;
+            height: 550px;
+            background: radial-gradient(circle, rgba(245, 158, 11, 0.15) 0%, rgba(30, 58, 138, 0) 70%);
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        /* Efecto de degradado / sombra difuminada proyectada hacia la derecha */
+        .brand-side::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            right: -40px; /* Se proyecta suavemente hacia el panel blanco */
+            width: 40px;
+            height: 100%;
+            background: linear-gradient(to right, rgba(13, 34, 71, 0.45) 0%, rgba(13, 34, 71, 0.15) 50%, rgba(13, 34, 71, 0) 100%);
+            pointer-events: none;
+            z-index: 10;
+        }
+
+
+        .brand-header {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 16px;
+            position: relative;
+            z-index: 2;
+        }
+
+        /* Contenedor del Logo Oficial UDI */
+        .brand-udi-logo-container {
+            display: inline-block;
+        }
+
+        .brand-udi-logo {
+            max-width: 220px;
+            width: 100%;
+            height: auto;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
+            background: #ffffff;
+            padding: 10px 14px;
+            display: block;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: transform .25s ease;
+        }
+
+        .brand-udi-logo:hover {
+            transform: translateY(-2px);
+        }
+
+        .brand-system-badge {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+
+        .brand-system-name {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-size: 26px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .brand-system-name-tag {
+            font-size: 11px;
+            font-weight: 700;
+            background: #ea580c;
+            color: #ffffff;
+            padding: 2px 8px;
+            border-radius: 6px;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+
+        .brand-system-motto {
+            font-size: 12px;
+            color: #fed7aa;
+            font-weight: 500;
+            line-height: 1.4;
+            max-width: 440px;
+        }
+
+        .brand-body {
+            position: relative;
+            z-index: 2;
+            margin: 36px 0;
+            max-width: 520px;
+        }
+
+        .brand-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            backdrop-filter: blur(8px);
+            padding: 6px 14px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 600;
+            color: #fef08a;
+            margin-bottom: 20px;
+        }
+
+        .brand-pill-dot {
+            width: 7px;
+            height: 7px;
+            background: #f59e0b;
+            border-radius: 50%;
+            box-shadow: 0 0 8px #f59e0b;
+        }
+
+        .brand-title {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-size: 32px;
+            font-weight: 800;
+            line-height: 1.25;
+            color: #ffffff;
+            margin-bottom: 16px;
+            letter-spacing: -0.5px;
+        }
+
+        .brand-title span {
+            color: #f59e0b;
+        }
+
+        .brand-desc {
+            font-size: 14px;
+            color: #cbd5e1;
+            line-height: 1.65;
+            margin-bottom: 30px;
+        }
+
+        /* 3 Puntos Clave */
+        .brand-features {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .feature-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 14px;
+            transition: transform .2s ease;
+        }
+
+        .feature-item:hover {
+            transform: translateX(4px);
+        }
+
+        .feature-icon-wrapper {
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #f59e0b;
+            flex-shrink: 0;
+            transition: all .25s ease;
+        }
+
+        .feature-item:hover .feature-icon-wrapper {
+            background: rgba(245, 158, 11, 0.16);
+            border-color: rgba(245, 158, 11, 0.4);
+            color: #fbbf24;
+            transform: scale(1.05);
+        }
+
+        .feature-text h4 {
+            font-size: 13.5px;
+            font-weight: 700;
+            color: #ffffff;
+            margin-bottom: 2px;
+        }
+
+        .feature-text p {
+            font-size: 12px;
+            color: #94a3b8;
+            line-height: 1.45;
+        }
+
+        .brand-footer {
+            position: relative;
+            z-index: 2;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding-top: 22px;
+            border-top: 1px solid rgba(255, 255, 255, 0.12);
+            font-size: 12px;
+            color: #94a3b8;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .brand-footer strong {
+            color: #f1f5f9;
+        }
+
+        /* ══════════════════════════════════════════════════════════
+           COLUMNA DERECHA: FORMULARIO DE ACCESO (50% - 55%)
+           ══════════════════════════════════════════════════════════ */
+        .form-side {
+            flex: 1 1 52%;
+            background: #ffffff;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 48px 64px;
+            position: relative;
+        }
+
+        /* Top Bar de la columna derecha */
+        .form-top-bar {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            width: 100%;
+        }
+
+        /* Dropdown Sutil de Cuentas Demo */
+        .demo-menu-wrapper {
+            position: relative;
+        }
+
+        .demo-badge-btn {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            color: #475569;
+            padding: 7px 14px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            transition: all .2s ease;
+        }
+
+        .demo-badge-btn:hover {
+            background: #f1f5f9;
+            color: #1e293b;
+            border-color: #cbd5e1;
+        }
+
+        .demo-dropdown {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            margin-top: 8px;
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+            border-radius: 12px;
+            width: 260px;
+            padding: 8px;
+            display: none;
+            z-index: 50;
+        }
+
+        .demo-dropdown.show {
+            display: block;
+        }
+
+        .demo-dropdown-title {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #94a3b8;
+            padding: 6px 10px 8px;
+        }
+
+        .demo-option {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 9px 12px;
+            border-radius: 8px;
+            border: none;
+            background: transparent;
+            text-align: left;
+            cursor: pointer;
+            transition: all .15s ease;
+        }
+
+        .demo-option:hover {
+            background: #f8fafc;
+        }
+
+        .demo-option-role {
+            font-size: 12.5px;
+            font-weight: 700;
+            color: #1e293b;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .demo-option-tag {
+            font-size: 10.5px;
+            font-weight: 600;
+            padding: 2px 7px;
+            border-radius: 4px;
+            background: #e2e8f0;
+            color: #475569;
+        }
+
+        /* Formulario Central */
+        .form-content-box {
+            max-width: 440px;
+            width: 100%;
+            margin: auto;
+            padding: 20px 0;
+        }
+
+        .form-title {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-size: 26px;
+            font-weight: 800;
+            color: #0f172a;
+            letter-spacing: -0.5px;
+            margin-bottom: 6px;
+        }
+
+        .form-subtitle {
+            font-size: 13.5px;
+            color: #64748b;
+            margin-bottom: 28px;
+        }
+
+        /* Alert Box */
+        .auth-alert {
+            padding: 12px 14px;
+            border-radius: 8px;
+            font-size: 12.5px;
+            font-weight: 500;
+            margin-bottom: 20px;
+            display: none;
+            line-height: 1.45;
+        }
+
+        .auth-alert.error {
+            background: #fef2f2;
+            border: 1px solid #fee2e2;
+            color: #991b1b;
+        }
+
+        .auth-alert.success {
+            background: #f0fdf4;
+            border: 1px solid #dcfce7;
+            color: #166534;
+        }
+
+        /* Campos de Entrada */
+        .form-group {
+            margin-bottom: 18px;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: #334155;
+            margin-bottom: 6px;
+        }
+
+        .input-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .input-icon {
+            position: absolute;
+            left: 14px;
+            color: #94a3b8;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+        }
+
+        .form-control {
+            width: 100%;
+            height: 44px;
+            padding: 0 14px 0 42px;
+            font-size: 13.5px;
+            font-family: inherit;
+            color: #0f172a;
+            background: #ffffff;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            outline: none;
+            transition: all .2s ease;
+        }
+
+        .form-control:focus {
+            border-color: #0f2b5c;
+            box-shadow: 0 0 0 3.5px rgba(15, 43, 92, 0.12);
+        }
+
+        .toggle-pwd {
+            position: absolute;
+            right: 12px;
+            background: none;
+            border: none;
+            color: #94a3b8;
+            cursor: pointer;
+            padding: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: color .2s ease;
+        }
+
+        .toggle-pwd:hover {
+            color: #475569;
+        }
+
+        /* Fila de Utilidades */
+        .form-utils-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 12.5px;
+            margin-bottom: 24px;
+        }
+
+        .remember-label {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            color: #475569;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .remember-label input {
+            accent-color: #0f2b5c;
+            width: 15px;
+            height: 15px;
+            cursor: pointer;
+        }
+
+        .forgot-link {
+            color: #0f2b5c;
+            text-decoration: none;
+            font-weight: 600;
+            transition: color .2s ease;
+        }
+
+        .forgot-link:hover {
+            color: #ea580c;
+            text-decoration: underline;
+        }
+
+        /* Botón de Acceso Principal */
+        .btn-submit {
+            width: 100%;
+            height: 44px;
+            background: #0f2b5c;
+            color: #ffffff;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: all .2s ease;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+        }
+
+        .btn-submit:hover {
+            background: #1e3a8a;
+            box-shadow: 0 4px 12px rgba(15, 43, 92, 0.25);
+        }
+
+        .btn-submit:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+
+        /* Separador */
+        .divider {
+            display: flex;
+            align-items: center;
+            margin: 22px 0;
+            color: #94a3b8;
+            font-size: 11.5px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .divider::before, .divider::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: #e2e8f0;
+        }
+
+        .divider span {
+            padding: 0 12px;
+        }
+
+        /* Botón Google Workspace UDI */
+        .btn-google {
+            width: 100%;
+            height: 44px;
+            background: #ffffff;
+            color: #334155;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            font-size: 13.5px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            transition: all .2s ease;
+        }
+
+        .btn-google:hover {
+            background: #f8fafc;
+            border-color: #94a3b8;
+            color: #0f172a;
+        }
+
+        .btn-google svg {
+            width: 18px;
+            height: 18px;
+        }
+
+        /* Footer del formulario */
+        .form-footer {
+            text-align: center;
+            font-size: 12px;
+            color: #64748b;
+            padding-top: 24px;
+            line-height: 1.5;
+        }
+
+        .form-footer strong {
+            color: #334155;
+        }
+
+        /* ── Responsive ─────────────────────────────────────────── */
+        @media (max-width: 1024px) {
+            .brand-side {
+                padding: 40px;
+            }
+            .form-side {
+                padding: 40px;
+            }
+            .brand-title {
+                font-size: 28px;
+            }
+        }
+
+        @media (max-width: 860px) {
+            .split-container {
+                flex-direction: column;
+            }
+            .brand-side {
+                flex: none;
+                padding: 36px 24px;
+            }
+            .brand-side::after {
+                top: auto;
+                bottom: -30px;
+                right: 0;
+                left: 0;
+                width: 100%;
+                height: 30px;
+                background: linear-gradient(to bottom, rgba(13, 34, 71, 0.45) 0%, rgba(13, 34, 71, 0) 100%);
+            }
+            .brand-body {
+                margin: 24px 0;
+            }
+            .brand-title {
+                font-size: 24px;
+            }
+            .brand-features {
+                display: none;
+            }
+            .form-side {
+                flex: 1;
+                padding: 36px 24px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div class="split-container">
+
+    <!-- ══════════════════════════════════════════════════════════
+         COLUMNA IZQUIERDA: IDENTIDAD INSTITUCIONAL
+         ══════════════════════════════════════════════════════════ -->
+    <aside class="brand-side">
+        <!-- Encabezado con Logotipo Oficial UDI -->
+        <div class="brand-header">
+            <div class="brand-udi-logo-container">
+                <img src="logo_udi.jpg" alt="Logo Oficial Universidad de Investigación y Desarrollo - UDI" class="brand-udi-logo">
+            </div>
+            <div class="brand-system-badge">
+                <div class="brand-system-name">
+                    <span>SIGPA</span>
+                    <span class="brand-system-name-tag">Portal Oficial</span>
+                </div>
+                <p class="brand-system-motto">
+                    Gestión, Seguimiento Pedagógico y Acreditación de Prácticas Académicas
+                </p>
+            </div>
+        </div>
+
+        <!-- Cuerpo Institucional -->
+        <div class="brand-body">
+            <div class="brand-pill">
+                <span class="brand-pill-dot"></span>
+                <span>Plataforma Pedagógica UDI</span>
+            </div>
+
+            <h1 class="brand-title">
+                Sistema Integral de Gestión de <span>Prácticas Académicas</span>
+            </h1>
+
+            <p class="brand-desc">
+                Fortaleciendo la formación docente, la trazabilidad en el aula y los estándares de acreditación de alta calidad (Decreto 1075 / CNA).
+            </p>
+
+            <!-- 3 Puntos Clave -->
+            <div class="brand-features">
+                <div class="feature-item">
+                    <div class="feature-icon-wrapper">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+                            <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
+                            <path d="m9 14 2 2 4-4"/>
+                        </svg>
+                    </div>
+                    <div class="feature-text">
+                        <h4>Seguimiento Pedagógico en Tiempo Real</h4>
+                        <p>Planeación estructurada por momentos de clase y diarios de campo formativos.</p>
+                    </div>
+                </div>
+
+                <div class="feature-item">
+                    <div class="feature-icon-wrapper">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"/>
+                            <circle cx="12" cy="12" r="6"/>
+                            <circle cx="12" cy="12" r="2"/>
+                        </svg>
+                    </div>
+                    <div class="feature-text">
+                        <h4>Evaluación por Rúbricas Directas</h4>
+                        <p>Acompañamiento simultáneo del Tutor Académico y aval in situ del Asesor.</p>
+                    </div>
+                </div>
+
+                <div class="feature-item">
+                    <div class="feature-icon-wrapper">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/>
+                            <path d="M12 11v4"/>
+                            <path d="m10 13 2-2 2 2"/>
+                        </svg>
+                    </div>
+                    <div class="feature-text">
+                        <h4>Centralización de Evidencias</h4>
+                        <p>Portafolio digital sincronizado con Drive/OneDrive y soportes normativos.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer Izquierdo -->
+        <div class="brand-footer">
+            <span><strong>UDI</strong> · Vicerrectoría Académica</span>
+            <span>© 2026 Universidad de Investigación y Desarrollo (UDI) · Todos los derechos reservados</span>
+        </div>
+    </aside>
+
+    <!-- ══════════════════════════════════════════════════════════
+         COLUMNA DERECHA: FORMULARIO DE ACCESO
+         ══════════════════════════════════════════════════════════ -->
+    <main class="form-side">
+        <!-- Top Bar con Menú Demo -->
+        <div class="form-top-bar">
+            <div class="demo-menu-wrapper">
+                <button type="button" class="demo-badge-btn" id="btnDemoMenu" onclick="toggleDemoDropdown()">
+                    <span>💡</span> Cuentas de Prueba Demo <small style="opacity:.7">▾</small>
+                </button>
+                <div class="demo-dropdown" id="demoDropdown">
+                    <div class="demo-dropdown-title">Selecciona un rol para autocompletar</div>
+                    <button type="button" class="demo-option" onclick="fillDemo('director@sigpa.edu', '1234')">
+                        <span class="demo-option-role">👔 Directora</span>
+                        <span class="demo-option-tag">Gestión</span>
+                    </button>
+                    <button type="button" class="demo-option" onclick="fillDemo('tutor@sigpa.edu', '1234')">
+                        <span class="demo-option-role">🎓 Tutor UDI</span>
+                        <span class="demo-option-tag">Académico</span>
+                    </button>
+                    <button type="button" class="demo-option" onclick="fillDemo('asesor@sigpa.edu', '1234')">
+                        <span class="demo-option-role">🏫 Asesora</span>
+                        <span class="demo-option-tag">In Situ</span>
+                    </button>
+                    <button type="button" class="demo-option" onclick="fillDemo('estudiante@sigpa.edu', '1234')">
+                        <span class="demo-option-role">🎒 Practicante</span>
+                        <span class="demo-option-tag">Estudiante</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Formulario Central -->
+        <div class="form-content-box">
+            <h2 class="form-title">Iniciar Sesión</h2>
+            <p class="form-subtitle">Ingresa con tu correo institucional y contraseña asignada</p>
+
+            <div id="loginMsg" class="auth-alert"></div>
+
+            <form id="formLogin" onsubmit="handleLogin(event)">
+                <!-- Campo Correo -->
+                <div class="form-group">
+                    <label class="form-label" for="email">Correo Institucional</label>
+                    <div class="input-wrapper">
+                        <span class="input-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+                            </svg>
+                        </span>
+                        <input type="email" id="email" class="form-control" placeholder="usuario@sigpa.edu" required autocomplete="email">
+                    </div>
+                </div>
+
+                <!-- Campo Contraseña -->
+                <div class="form-group">
+                    <label class="form-label" for="contrasena">Contraseña</label>
+                    <div class="input-wrapper">
+                        <span class="input-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                            </svg>
+                        </span>
+                        <input type="password" id="contrasena" class="form-control" placeholder="••••••••" required autocomplete="current-password">
+                        <button type="button" class="toggle-pwd" onclick="togglePassword('contrasena', this)" title="Mostrar / Ocultar">
+                            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Utilidades -->
+                <div class="form-utils-row">
+                    <label class="remember-label">
+                        <input type="checkbox" id="chkRecordar" checked>
+                        <span>Recordar credenciales</span>
+                    </label>
+                    <a href="javascript:void(0)" class="forgot-link" onclick="handleForgot()">¿Olvidaste tu contraseña?</a>
+                </div>
+
+                <!-- Botón de Acceso Principal -->
+                <button type="submit" class="btn-submit" id="btnSubmit">
+                    <span>Acceder al Sistema</span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>
+                    </svg>
+                </button>
+            </form>
+
+            <div class="divider">
+                <span>O continuar con</span>
+            </div>
+
+            <!-- Botón Google Workspace UDI -->
+            <button type="button" class="btn-google" id="btn-google-login" onclick="handleGoogleLogin()">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                </svg>
+                <span>Ingresar con Google Workspace UDI</span>
+            </button>
+        </div>
+
+        <!-- Footer Derecho -->
+        <footer class="form-footer">
+            <p><strong>Universidad de Investigación y Desarrollo (UDI)</strong> · Sede Principal Bucaramanga / Barrancabermeja / San Gil</p>
+            <p style="font-size: 11px; margin-top: 4px; color: #94a3b8;">© 2026 Universidad de Investigación y Desarrollo (UDI) · Todos los derechos reservados</p>
+        </footer>
+    </main>
+
+</div>
+
+<script>
+    /* ── Dropdown Demo Menu ────────────────────────── */
+    function toggleDemoDropdown() {
+        const dd = document.getElementById('demoDropdown');
+        dd.classList.toggle('show');
+    }
+
+    // Cerrar dropdown al hacer clic afuera
+    document.addEventListener('click', function(e) {
+        const wrapper = document.querySelector('.demo-menu-wrapper');
+        if (wrapper && !wrapper.contains(e.target)) {
+            const dd = document.getElementById('demoDropdown');
+            if (dd) dd.classList.remove('show');
+        }
+    });
+
+    /* ── Llenar credenciales Demo ──────────────────── */
+    function fillDemo(email, pass) {
+        const eInput = document.getElementById('email');
+        const pInput = document.getElementById('contrasena');
+        if (eInput && pInput) {
+            eInput.value = email;
+            pInput.value = pass;
+            eInput.focus();
+        }
+        const dd = document.getElementById('demoDropdown');
+        if (dd) dd.classList.remove('show');
+    }
+
+    /* ── Toggle Password Visibility ──────────────── */
+    function togglePassword(inputId, btn) {
+        const input = document.getElementById(inputId);
+        const isText = input.type === 'text';
+        input.type = isText ? 'password' : 'text';
+        btn.innerHTML = isText
+            ? `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+               </svg>`
+            : `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                <line x1="1" y1="1" x2="23" y2="23"/>
+               </svg>`;
+    }
+
+    /* ── Olvido de Contraseña ─────────────────────── */
+    function handleForgot() {
+        alert('Para restablecer tu contraseña institucional, comunícate con la Coordinación de Prácticas o con Mesa de Ayuda TIC (soporte@udi.edu.co).');
+    }
+
+    /* ── Google Login Placeholder ─────────────────── */
+    function handleGoogleLogin() {
+        const btn = document.getElementById('btn-google-login');
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = `<span style="display:inline-block;animation:spin 1s linear infinite">⏳</span> Conectando con Google Workspace...`;
+        }
+        setTimeout(() => {
+            const msg = document.getElementById('loginMsg');
+            if (msg) {
+                msg.textContent = 'ℹ️ La autenticación federada con Google Workspace UDI está en fase de despliegue institucional. Por favor ingresa con tus credenciales asignadas.';
+                msg.className = 'auth-alert error';
+                msg.style.display = 'block';
+            }
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = `
+                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                    </svg>
+                    <span>Ingresar con Google Workspace UDI</span>
+                `;
+            }
+        }, 1000);
+    }
+
+    /* ── Login Submit Handler ────────────────────── */
+    async function handleLogin(e) {
+        e.preventDefault();
+        const email      = document.getElementById('email').value.trim();
+        const contrasena = document.getElementById('contrasena').value.trim();
+        const msg        = document.getElementById('loginMsg');
+        const btn        = document.getElementById('btnSubmit');
+
+        msg.style.display = 'none';
+
+        if (!email || !contrasena) {
+            msg.textContent = 'Por favor ingresa tu correo y contraseña.';
+            msg.className = 'auth-alert error';
+            msg.style.display = 'block';
+            return;
+        }
+
+        btn.disabled = true;
+        btn.innerHTML = `<span>Verificando credenciales...</span>`;
+
+        try {
+            const res  = await fetch('/api/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, contrasena })
+            });
+            const data = await res.json();
+            if (data.success) {
+                sessionStorage.setItem('sigpa_user', JSON.stringify(data.usuario));
+                btn.innerHTML = '<span>✓ Acceso Concedido</span>';
+                setTimeout(() => { window.location.href = 'dashboard.html'; }, 300);
+            } else {
+                msg.textContent = data.message || 'Credenciales inválidas o usuario no habilitado.';
+                msg.className = 'auth-alert error';
+                msg.style.display = 'block';
+                btn.disabled = false;
+                btn.innerHTML = `<span>Acceder al Sistema</span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>
+                    </svg>`;
+            }
+        } catch (err) {
+            msg.textContent = 'No se pudo conectar al servidor de autenticación. Verifica que el backend esté en ejecución.';
+            msg.className = 'auth-alert error';
+            msg.style.display = 'block';
+            btn.disabled = false;
+            btn.innerHTML = `<span>Acceder al Sistema</span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>
+                </svg>`;
+        }
+    }
+</script>
+</body>
+</html>
