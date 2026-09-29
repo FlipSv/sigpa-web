@@ -1,142 +1,142 @@
-# SIGPA — Sistema Integral de Gestión de Prácticas Académicas 🎓
+# SIGPA — Academic Internship Management System 🎓
 
 [![Node.js](https://img.shields.io/badge/Node.js-v18+-339933?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org/)
 [![Express](https://img.shields.io/badge/Express-4.19-000000?style=flat-square&logo=express&logoColor=white)](https://expressjs.com/)
 [![Oracle Database](https://img.shields.io/badge/Oracle_DB-10g_/_XE-F80000?style=flat-square&logo=oracle&logoColor=white)](https://www.oracle.com/database/)
 [![JavaScript](https://img.shields.io/badge/Frontend-Vanilla_JS_ES6+-F7DF1E?style=flat-square&logo=javascript&logoColor=black)](https://developer.mozilla.org/)
-[![Institution](https://img.shields.io/badge/Universidad-UDI-0d2247?style=flat-square)](https://www.udi.edu.co/)
+[![Institution](https://img.shields.io/badge/University-UDI-0d2247?style=flat-square)](https://www.udi.edu.co/)
 
-**SIGPA** es una plataforma web completa desarrollada para la **Universidad de Investigación y Desarrollo (UDI)** diseñada para automatizar, supervisar y centralizar todo el ciclo de vida de las prácticas académicas y pre-profesionales de los estudiantes.
+**SIGPA** (*Sistema Integral de Gestión de Prácticas Académicas*) is an enterprise-grade full-stack web application developed for **Universidad de Investigación y Desarrollo (UDI)**. It centralizes, automates, and monitors the entire lifecycle of student academic internships and pre-professional practicums.
 
-El sistema conecta en tiempo real a directores, tutores académicos, asesores institucionales y estudiantes, garantizando transparencia en el registro de horas, aprobación de bitácoras y gestión documental.
+The platform connects Program Directors, Academic Tutors, Institutional On-Site Advisors, and Students in real time—ensuring complete auditability, logbook validation, and institutional compliance.
 
 ---
 
-## 🏛️ Arquitectura del Sistema
+## 🏛️ System Architecture
 
-El proyecto está diseñado bajo una arquitectura desacoplada en tres capas principales:
+The platform follows a decoupled, three-tier architecture ensuring separation of concerns, scalability, and maintainability:
 
 ```mermaid
 graph LR
-    subgraph Frontend["Capa de Presentación (Web)"]
-        UI["Portal Institucional (index.html)"]
-        DASH["Dashboard Interactivo (dashboard.html)"]
+    subgraph Frontend["Presentation Layer (Web Client)"]
+        UI["Institutional Portal (index.html)"]
+        DASH["Interactive Role Dashboard (dashboard.html)"]
         JS["Client Logic (Vanilla JS / Fetch API)"]
     end
 
-    subgraph Backend["Capa de Servicios (Node.js)"]
-        EXP["Servidor Express (:8081)"]
+    subgraph Backend["Service Layer (Node.js)"]
+        EXP["Express Server (:8081)"]
         MW["Middlewares (CORS, Morgan, ErrorHandler)"]
-        ROUTES["Rutas REST (/api/*)"]
-        CTRL["Controladores por Rol"]
+        ROUTES["REST Endpoints (/api/*)"]
+        CTRL["Role-based Controllers"]
     end
 
-    subgraph Database["Capa de Datos (Oracle)"]
+    subgraph Database["Data Layer (Oracle)"]
         POOL["Connection Pool (oracledb)"]
         ORACLE[("Oracle Database 10g / XE")]
     end
 
     UI --> JS
     DASH --> JS
-    JS -->|"HTTP / JSON REST"| EXP
+    JS -->|"HTTP / REST JSON"| EXP
     EXP --> MW --> ROUTES --> CTRL
     CTRL --> POOL --> ORACLE
 ```
 
 ---
 
-## 👥 Módulos y Roles
+## 👥 Modules & Role-Based Access
 
-| Rol | Alcance y Responsabilidades |
+| Role | Scope & Responsibilities |
 | :--- | :--- |
-| **Director de Programa** | Administración general, gestión de convenios con instituciones, configuración de prácticas, métricas y KPIs globales. |
-| **Tutor Académico** | Supervisión pedagógica, revisión y validación de horas y calificaciones finales de las prácticas asignadas. |
-| **Asesor In-Situ** | Evaluación del practicante en la institución receptora y aval de bitácoras presenciales. |
-| **Estudiante Practicante** | Consulta de asignaciones, registro periódico de bitácoras con evidencias y seguimiento de horas acumuladas. |
+| **Program Director** | General administration, institutional partnership management, placement configuration, and macro-level KPI reporting. |
+| **Academic Tutor** | Pedagogical supervisor; validates accumulated student hours, oversees weekly progress, and submits official grading. |
+| **On-Site Advisor** | In-situ supervisor at the host institution; verifies physical attendance and provides endorsement for student logbooks. |
+| **Student Intern** | Practicum candidate; consults assigned placements, submits regular activity logbooks with digital evidence, and tracks approved hours. |
 
 ---
 
-## 📁 Estructura del Repositorio
+## 📁 Repository Structure
 
 ```text
 sigpa_app/
-├── backend-node/           # Backend API desarrollado en Node.js y Express
+├── backend-node/           # Backend REST API built with Node.js and Express
 │   ├── src/
-│   │   ├── config/         # Configuración del pool de Oracle y scripts DDL
-│   │   ├── controllers/    # Lógica de negocio segmentada por rol
-│   │   ├── middlewares/    # Manejo centralizado de errores y seguridad
-│   │   ├── routes/         # Endpoints REST expuestos (/api/auth, /api/estudiante, etc.)
-│   │   └── app.js          # Punto de entrada y servidor Express con política Fail-Fast
-│   ├── .env.example        # Plantilla de variables de entorno
-│   └── package.json        # Dependencias del servidor (oracledb, express, cors, dotenv)
+│   │   ├── config/         # Oracle connection pool and automated DDL setup scripts
+│   │   ├── controllers/    # Business logic segregated by system role
+│   │   ├── middlewares/    # Centralized error handling and security policies
+│   │   ├── routes/         # REST API routes (/api/auth, /api/estudiante, etc.)
+│   │   └── app.js          # Express entrypoint with Fail-Fast DB connection checks
+│   ├── .env.example        # Environment variables template
+│   └── package.json        # Dependencies (oracledb, express, cors, dotenv)
 │
-├── frontend/               # Aplicación cliente web (Single Page / Multi-view)
+├── frontend/               # Responsive client-side web application
 │   ├── css/
-│   │   └── style.css       # Estilos con diseño institucional UDI y componentes modernos
+│   │   └── style.css       # Modern CSS3 stylesheet with institutional UDI branding
 │   ├── js/
-│   │   └── app.js          # Consumo de API REST, renderizado reactivo y validaciones
-│   ├── index.html          # Portal institucional de bienvenida y autenticación
-│   └── dashboard.html      # Panel interactivo según el rol autenticado
+│   │   └── app.js          # REST API consumption, DOM state management, and validations
+│   ├── index.html          # Institutional landing and multi-role authentication portal
+│   └── dashboard.html      # Dynamic dashboard tailored to each authenticated role
 │
 └── database/
-    └── schema.sql          # Script DDL completo de tablas, restricciones e índices
+    └── schema.sql          # Complete Oracle DDL: tables, constraints, foreign keys, and seeds
 ```
 
 ---
 
-## 🚀 Puesta en Marcha (Instalación Local)
+## 🚀 Getting Started (Local Setup)
 
-### 1. Prerrequisitos
-* **Node.js** v18 o superior instalado.
-* Instancia activa de **Oracle Database** (10g, 11g, 19c o Oracle XE).
+### 1. Prerequisites
+* **Node.js** v18 or higher installed.
+* Active **Oracle Database** instance (10g, 11g, 19c, or Oracle Database XE).
 
-### 2. Configuración del Backend
-Accede a la carpeta del servidor y prepara las variables de entorno:
+### 2. Backend Configuration
+Navigate to the backend directory and install dependencies:
 
 ```bash
 cd backend-node
 npm install
 ```
 
-Copia el archivo de ejemplo para crear tu configuración local:
+Create your local environment file from the template:
 ```bash
 cp .env.example .env
 ```
 
-Configura tus credenciales de Oracle en `.env`:
+Configure your Oracle connection credentials in `.env`:
 ```env
 PORT=8081
-DB_USER=tu_usuario_oracle
-DB_PASSWORD=tu_password_oracle
+DB_USER=your_oracle_user
+DB_PASSWORD=your_oracle_password
 DB_CONNECT_STRING=localhost:1521/XE
 ```
 
-### 3. Inicialización de la Base de Datos
-Ejecuta el script para verificar o crear automáticamente las tablas en Oracle:
+### 3. Database Initialization
+Run the automated setup script to verify connectivity and create required DDL tables in Oracle:
 ```bash
 npm run setup-db
 ```
 
-### 4. Ejecutar la Aplicación
-Inicia el servidor en modo desarrollo:
+### 4. Run the Application
+Start the server in development mode with live reload:
 ```bash
 npm run dev
 ```
 
-* **Frontend Web:** Abre `http://localhost:8081` en tu navegador.
-* **Test / Diagnóstico de BD:** `http://localhost:8081/api/test-db`
+* **Web Application:** Open `http://localhost:8081` in your browser.
+* **Database Health Check:** `http://localhost:8081/api/test-db`
 
 ---
 
-## 🛡️ Buenas Prácticas Implementadas
-* **Connection Pooling:** Uso eficiente de conexiones concurrentes a través de `oracledb.createPool`.
-* **Fail-Fast Policy:** El servidor valida la integridad y conectividad con la base de datos antes de aceptar peticiones HTTP.
-* **Separación de Responsabilidades (SoC):** Desacoplamiento estricto entre capa de datos, lógica de negocio y presentación.
-* **Seguridad:** Variables sensibles aisladas mediante `.env` (excluidas del control de versiones).
+## 🛡️ Engineering Highlights & Best Practices
+* **Connection Pooling:** Efficient, concurrent database access using `oracledb.createPool`.
+* **Fail-Fast Architecture:** The server strictly validates Oracle database connectivity at boot time before accepting any HTTP requests.
+* **Separation of Concerns (SoC):** Strict isolation between data persistence, business logic, and client-side presentation.
+* **Secure Environment:** Sensitive credentials and connection strings are isolated via `.env` (strictly excluded from Git tracking).
 
 ---
 
-## 👨‍💻 Autores
-Proyecto Integrador desarrollado para la **Universidad de Investigación y Desarrollo (UDI)**:
+## 👨‍💻 Authors & Acknowledgments
+Capstone Integrator Project developed for **Universidad de Investigación y Desarrollo (UDI)**:
 * **Andrés Sequeda** ([@FlipSv](https://github.com/FlipSv))
 * **Santiago Acevedo**
