@@ -21,6 +21,7 @@ async function runSetup() {
 
         // Alter tables para sincronizar columnas si faltan
         const alterStatements = [
+            `ALTER TABLE USUARIO MODIFY (CONTRASENA VARCHAR2(255))`,
             `ALTER TABLE PRACTICA ADD (DESCRIPCION VARCHAR2(500))`,
             `ALTER TABLE INSTITUCION ADD (FECHA_VENC_CONVENIO DATE)`,
             `ALTER TABLE ASIGNACION ADD (ID_ESTUDIANTE NUMBER(10))`,

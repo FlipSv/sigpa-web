@@ -977,7 +977,12 @@
             });
             const data = await res.json();
             if (data.success) {
+                if (data.token) {
+                    sessionStorage.setItem('sigpa_token', data.token);
+                    localStorage.setItem('sigpa_token', data.token);
+                }
                 sessionStorage.setItem('sigpa_user', JSON.stringify(data.usuario));
+                localStorage.setItem('sigpa_user', JSON.stringify(data.usuario));
                 btn.innerHTML = '<span>✓ Acceso Concedido</span>';
                 setTimeout(() => { window.location.href = 'dashboard.html'; }, 300);
             } else {
@@ -1001,6 +1006,17 @@
                 </svg>`;
         }
     }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        if (window.location.search.includes('session_expired=1')) {
+            const msg = document.getElementById('loginMsg');
+            if (msg) {
+                msg.textContent = 'Tu sesión ha expirado o el token de acceso no es válido. Por favor ingresa nuevamente.';
+                msg.className = 'auth-alert error';
+                msg.style.display = 'block';
+            }
+        }
+    });
 </script>
 </body>
 </html>

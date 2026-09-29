@@ -9,6 +9,45 @@
 const API_BASE = 'http://localhost:8081/api';
 
 /* ═══════════════════════════════════════════════════════════════════════
+   HTTP INTERCEPTOR (JWT & AUTH HEADER)
+   Inyecta automáticamente 'Authorization: Bearer <token>' en todas las
+   peticiones hacia la API y gestiona el vencimiento de sesión (401).
+   ═══════════════════════════════════════════════════════════════════════ */
+(function setupFetchInterceptor() {
+    const _originalFetch = window.fetch;
+    window.fetch = async function(resource, init = {}) {
+        const token = sessionStorage.getItem('sigpa_token') || localStorage.getItem('sigpa_token');
+        const urlStr = typeof resource === 'string' ? resource : (resource && resource.url ? resource.url : '');
+        const isApi = urlStr.includes('/api') || (typeof API_BASE === 'string' && urlStr.startsWith(API_BASE));
+
+        if (token && isApi) {
+            init = init || {};
+            const headers = new Headers(init.headers || {});
+            if (!headers.has('Authorization')) {
+                headers.set('Authorization', `Bearer ${token}`);
+            }
+            init.headers = headers;
+        }
+
+        const response = await _originalFetch(resource, init);
+
+        // Si el backend responde 401 y la petición es a la API (no login), redirigir
+        if (response.status === 401 && isApi && !urlStr.includes('/login')) {
+            console.warn('[AUTH] Sesión expirada o token no autorizado (401). Redirigiendo a login...');
+            sessionStorage.removeItem('sigpa_token');
+            sessionStorage.removeItem('sigpa_user');
+            localStorage.removeItem('sigpa_token');
+            localStorage.removeItem('sigpa_user');
+            if (!window.location.pathname.endsWith('index.html') && !window.location.pathname.endsWith('/')) {
+                window.location.href = 'index.html?session_expired=1';
+            }
+        }
+
+        return response;
+    };
+})();
+
+/* ═══════════════════════════════════════════════════════════════════════
    CHART.JS GLOBAL CONFIG
    ═══════════════════════════════════════════════════════════════════════ */
 if (typeof Chart !== 'undefined') {
@@ -61,7 +100,12 @@ async function handleLogin(e) {
         });
         const data = await res.json();
         if (data.success) {
+            if (data.token) {
+                sessionStorage.setItem('sigpa_token', data.token);
+                localStorage.setItem('sigpa_token', data.token);
+            }
             sessionStorage.setItem('sigpa_user', JSON.stringify(data.usuario));
+            localStorage.setItem('sigpa_user', JSON.stringify(data.usuario));
             window.location.href = 'dashboard.html';
         } else {
             msgBox.className = 'alert-box alert-danger';
@@ -79,12 +123,19 @@ async function handleLogin(e) {
 }
 
 function logout() {
+    sessionStorage.removeItem('sigpa_token');
     sessionStorage.removeItem('sigpa_user');
+    localStorage.removeItem('sigpa_token');
+    localStorage.removeItem('sigpa_user');
     window.location.href = 'index.html';
 }
 
+function getToken() {
+    return sessionStorage.getItem('sigpa_token') || localStorage.getItem('sigpa_token');
+}
+
 function getCurrentUser() {
-    const u = sessionStorage.getItem('sigpa_user');
+    const u = sessionStorage.getItem('sigpa_user') || localStorage.getItem('sigpa_user');
     return u ? JSON.parse(u) : null;
 }
 

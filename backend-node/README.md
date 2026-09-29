@@ -53,22 +53,45 @@ backend-node/
 │   │   ├── database.js        # Pool oracledb, executeQuery y Fail-Fast
 │   │   └── setup.js           # DDLs y verificación en Oracle 10g
 │   ├── controllers/
-│   │   ├── auth.controller.js       # Autenticación contra USUARIO en Oracle
-│   │   ├── director.controller.js   # KPIs, convenios, cupos y asignaciones
+│   │   ├── auth.controller.js       # Autenticación con Bcrypt y emisión de JWT
+│   │   ├── director.controller.js   # KPIs, convenios, cupos y creación de usuarios con hash
 │   │   ├── estudiante.controller.js # Bitácoras y avance de horas
 │   │   ├── tutor.controller.js      # Transacciones de calificación
 │   │   └── asesor.controller.js     # Avales in situ
 │   ├── middlewares/
+│   │   ├── auth.middleware.js       # verificarToken (JWT Bearer) y verificarRol ([roles])
 │   │   └── errorHandler.js          # Manejo centralizado de errores HTTP
 │   ├── routes/
-│   │   ├── auth.routes.js
-│   │   ├── director.routes.js
-│   │   ├── estudiante.routes.js
-│   │   ├── tutor.routes.js
-│   │   └── asesor.routes.js
+│   │   ├── auth.routes.js           # /api/login, /api/perfil
+│   │   ├── director.routes.js       # Rutas protegidas (DIRECTOR)
+│   │   ├── estudiante.routes.js     # Rutas protegidas (ESTUDIANTE / Roles autorizados)
+│   │   ├── tutor.routes.js          # Rutas protegidas (TUTOR / COORDINADOR)
+│   │   └── asesor.routes.js         # Rutas protegidas (ASESOR)
 │   └── app.js                 # Servidor Express y arranque con validación Oracle
-├── .env                       # Credenciales activas de Oracle 10g
+├── .env                       # Variables de entorno y JWT_SECRET
 ├── .env.example               # Plantilla de entorno
-├── package.json               # Dependencias (oracledb, express, cors, etc.)
+├── test_api.js                # Suite de pruebas de integración con Oracle 10g
+├── test_auth_unit.js          # Suite de pruebas unitarias de seguridad (Bcrypt + JWT)
+├── package.json               # Dependencias (bcryptjs, jsonwebtoken, oracledb, etc.)
 └── README.md
 ```
+
+---
+
+## 🔒 Arquitectura de Seguridad Implementada
+
+### A. Cifrado Unidireccional de Contraseñas (Bcrypt)
+- Las contraseñas en la tabla `USUARIO` nunca se almacenan en texto plano.
+- Al registrar usuarios (ej. `POST /api/director/nuevo_usuario`), la contraseña se procesa con `bcrypt.hash(contrasena, 10)` generando un hash seguro de 60 caracteres.
+- Al iniciar sesión (`POST /api/login`), se valida con `bcrypt.compare(contrasena, hashAlmacenado)`.
+- **Auto-migración transparente:** Si existen cuentas históricas con contraseñas en texto plano, el sistema valida la credencial y actualiza automáticamente su registro en Oracle a un hash bcrypt en su primer inicio de sesión.
+- Se amplió la columna en Oracle a `VARCHAR2(255)` para garantizar almacenamiento seguro sin truncamientos.
+
+### B. Tokens de Sesión (JWT) y Control de Acceso por Roles (RBAC)
+- **Generación de Token:** Tras validar credenciales exitosamente, el servidor emite un JSON Web Token firmado con clave secreta (`JWT_SECRET`) y vigencia configurable (`JWT_EXPIRES_IN=8h`), con el payload `{ id, nombre, email, rol }`.
+- **Almacenamiento Cliente:** El frontend almacena el token en `sessionStorage` y `localStorage` (`sigpa_token`).
+- **Interceptor HTTP:** En el frontend (`frontend/js/app.js`), un interceptor inyecta automáticamente la cabecera `Authorization: Bearer <token>` en todas las llamadas a la API y redirige automáticamente al login (`index.html?session_expired=1`) si el token expira o devuelve HTTP 401.
+- **Middlewares de Protección:**
+  - `verificarToken`: Valida la presencia y autenticidad del token Bearer.
+  - `verificarRol(roles)`: Comprueba si el rol del usuario autenticado pertenece a los roles permitidos (ej. `DIRECTOR`, `ESTUDIANTE`, `TUTOR`), denegando accesos no autorizados con código HTTP 403 Forbidden.
+

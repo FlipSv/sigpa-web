@@ -16,6 +16,7 @@
  */
 'use strict';
 
+const bcrypt = require('bcryptjs');
 const { executeQuery } = require('../config/database');
 const { createError } = require('../middlewares/errorHandler');
 
@@ -157,6 +158,9 @@ async function nuevoUsuario(req, res, next) {
             throw createError(400, `El correo ${cleanEmail} ya se encuentra registrado en el sistema`);
         }
 
+        // Cifrado unidireccional de la contraseña con bcrypt
+        const hashedPassword = await bcrypt.hash(contrasena.trim(), 10);
+
         const insertSql = `
             INSERT INTO USUARIO (ID_USUARIO, NOMBRE, APELLIDO, EMAIL, CONTRASENA, ROL, ACTIVO)
             VALUES ((SELECT NVL(MAX(ID_USUARIO), 0) + 1 FROM USUARIO), :nombre, :apellido, :email, :contrasena, :rol, 'S')
@@ -165,7 +169,7 @@ async function nuevoUsuario(req, res, next) {
             nombre: nombre.trim(),
             apellido: (apellido || '').trim(),
             email: cleanEmail,
-            contrasena: contrasena.trim(),
+            contrasena: hashedPassword,
             rol: rolUpper,
         });
 

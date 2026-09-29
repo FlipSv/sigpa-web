@@ -1,5 +1,6 @@
 /**
  * SIGPA — Suite de Pruebas de Integración con Oracle 10g
+ * Incluye pruebas de seguridad: JWT, Roles y validación de contraseñas
  */
 'use strict';
 
@@ -11,7 +12,7 @@ const PORT = 8099;
 
 async function runTests() {
     console.log('====================================================');
-    console.log('  SIGPA — Tests de Endpoints con Oracle 10g');
+    console.log('  SIGPA — Tests de Endpoints y Seguridad (JWT + Roles)');
     console.log('====================================================');
 
     try {
@@ -26,13 +27,16 @@ async function runTests() {
         let passed = 0;
         let failed = 0;
 
-        async function req(method, path, body = null) {
+        let directorToken = null;
+        let estudianteToken = null;
+
+        async function req(method, path, body = null, token = null) {
             return new Promise((resolve, reject) => {
                 const url = `http://localhost:${PORT}${path}`;
-                const opts = {
-                    method,
-                    headers: { 'Content-Type': 'application/json' },
-                };
+                const headers = { 'Content-Type': 'application/json' };
+                if (token) headers['Authorization'] = `Bearer ${token}`;
+
+                const opts = { method, headers };
                 const r = http.request(url, opts, (res) => {
                     let data = '';
                     res.on('data', chunk => data += chunk);
@@ -61,57 +65,83 @@ async function runTests() {
             }
         }
 
-        console.log('\n--- Ejecutando Pruebas Generales ---');
+        console.log('\n--- Ejecutando Pruebas de Conexión y Autenticación ---');
 
         await test('GET /api/test-db', async () => {
             const res = await req('GET', '/api/test-db');
             if (res.status !== 200 || !res.data.success) throw new Error('Test DB falló');
         });
 
-        await test('POST /api/login (Director)', async () => {
+        await test('POST /api/login (Director) -> Genera JWT', async () => {
             const res = await req('POST', '/api/login', { email: 'director@sigpa.edu', contrasena: '1234' });
             if (res.status !== 200 || res.data.usuario.rol !== 'DIRECTOR') throw new Error('Login director falló');
+            if (!res.data.token) throw new Error('No se generó token JWT para el director');
+            directorToken = res.data.token;
         });
 
-        await test('POST /api/login (Estudiante)', async () => {
+        await test('POST /api/login (Estudiante) -> Genera JWT', async () => {
             const res = await req('POST', '/api/login', { email: 'estudiante@sigpa.edu', contrasena: '1234' });
             if (res.status !== 200 || res.data.usuario.rol !== 'ESTUDIANTE') throw new Error('Login estudiante falló');
+            if (!res.data.token) throw new Error('No se generó token JWT para el estudiante');
+            estudianteToken = res.data.token;
         });
 
-        console.log('\n--- Módulo Director ---');
+        await test('POST /api/login (Credenciales inválidas) -> Retorna 401', async () => {
+            const res = await req('POST', '/api/login', { email: 'director@sigpa.edu', contrasena: 'clave_incorrecta_99' });
+            if (res.status !== 401) throw new Error(`Se esperaba 401 y se obtuvo ${res.status}`);
+        });
+
+        console.log('\n--- Pruebas de Seguridad y Control de Acceso (Middlewares) ---');
+
+        await test('Seguridad 1: GET /api/director/kpis sin Token -> Retorna 401 Unauthorized', async () => {
+            const res = await req('GET', '/api/director/kpis');
+            if (res.status !== 401) throw new Error(`Se esperaba 401 y se obtuvo ${res.status}`);
+        });
+
+        await test('Seguridad 2: GET /api/director/kpis con Token Estudiante -> Retorna 403 Forbidden', async () => {
+            const res = await req('GET', '/api/director/kpis', null, estudianteToken);
+            if (res.status !== 403) throw new Error(`Se esperaba 403 y se obtuvo ${res.status}`);
+        });
+
+        await test('Seguridad 3: GET /api/director/kpis con Token Director -> Retorna 200 OK', async () => {
+            const res = await req('GET', '/api/director/kpis', null, directorToken);
+            if (res.status !== 200) throw new Error(`Se esperaba 200 y se obtuvo ${res.status}`);
+        });
+
+        console.log('\n--- Módulo Director (Con Token Autorizado) ---');
 
         await test('GET /api/director/kpis', async () => {
-            const res = await req('GET', '/api/director/kpis');
+            const res = await req('GET', '/api/director/kpis', null, directorToken);
             if (res.status !== 200 || typeof res.data.data.totalEstudiantes !== 'number') throw new Error('KPIs falló');
         });
 
         await test('GET /api/director/estado', async () => {
-            const res = await req('GET', '/api/director/estado');
+            const res = await req('GET', '/api/director/estado', null, directorToken);
             if (res.status !== 200 || !Array.isArray(res.data.data)) throw new Error('Prácticas falló');
         });
 
         await test('GET /api/director/instituciones', async () => {
-            const res = await req('GET', '/api/director/instituciones');
+            const res = await req('GET', '/api/director/instituciones', null, directorToken);
             if (res.status !== 200 || !Array.isArray(res.data.data)) throw new Error('Instituciones falló');
         });
 
         await test('GET /api/director/asignaciones', async () => {
-            const res = await req('GET', '/api/director/asignaciones');
+            const res = await req('GET', '/api/director/asignaciones', null, directorToken);
             if (res.status !== 200 || !Array.isArray(res.data.data)) throw new Error('Asignaciones falló');
         });
 
-        console.log('\n--- Módulo Estudiante (4 Funcionalidades Pedagógicas) ---');
+        console.log('\n--- Módulo Estudiante (Con Token Autorizado) ---');
 
         let idAsignacionEstudiante = 1;
 
         await test('1. GET /api/estudiante/asignacion', async () => {
-            const res = await req('GET', '/api/estudiante/asignacion?id_estudiante=3');
+            const res = await req('GET', '/api/estudiante/asignacion?id_estudiante=3', null, estudianteToken);
             if (res.status !== 200 || !res.data.success) throw new Error('Asignación falló: ' + JSON.stringify(res.data));
             if (res.data.data && res.data.data.idAsignacion) idAsignacionEstudiante = res.data.data.idAsignacion;
         });
 
         await test('2. GET /api/estudiante/progreso (Medidor Predictivo / Semáforo)', async () => {
-            const res = await req('GET', '/api/estudiante/progreso?id_estudiante=3');
+            const res = await req('GET', '/api/estudiante/progreso?id_estudiante=3', null, estudianteToken);
             if (res.status !== 200 || !res.data.success) throw new Error('Progreso falló');
             const d = res.data.data;
             if (!['VERDE', 'AMARILLO', 'ROJO'].includes(d.semaforo)) throw new Error('Semáforo inválido: ' + d.semaforo);
@@ -120,18 +150,18 @@ async function runTests() {
         });
 
         await test('3. GET /api/estudiante/preguntas-guia/:id_practica/:visita (Reflexión Docente)', async () => {
-            const res = await req('GET', '/api/estudiante/preguntas-guia/1/1');
+            const res = await req('GET', '/api/estudiante/preguntas-guia/1/1', null, estudianteToken);
             if (res.status !== 200 || !res.data.success || !Array.isArray(res.data.data)) throw new Error('Preguntas guía falló');
             if (res.data.data.length === 0) throw new Error('No se retornaron preguntas guía');
         });
 
         await test('4. GET /api/estudiante/timeline (Línea de Tiempo Pedagógica)', async () => {
-            const res = await req('GET', '/api/estudiante/timeline?id_estudiante=3');
+            const res = await req('GET', '/api/estudiante/timeline?id_estudiante=3', null, estudianteToken);
             if (res.status !== 200 || !res.data.success || !Array.isArray(res.data.data)) throw new Error('Timeline falló');
         });
 
         await test('5. GET /api/estudiante/evidencias (Portafolio Digital)', async () => {
-            const res = await req('GET', '/api/estudiante/evidencias?id_estudiante=3');
+            const res = await req('GET', '/api/estudiante/evidencias?id_estudiante=3', null, estudianteToken);
             if (res.status !== 200 || !res.data.success || !Array.isArray(res.data.data)) throw new Error('Evidencias falló');
         });
 
@@ -146,7 +176,7 @@ async function runTests() {
                 reflexion_docente: 'Los niños mostraron alta receptividad; se requiere reforzar tiempos en la transición.',
                 evidencia: 'https://drive.google.com/drive/folders/ejemplo_evidencia_visita2'
             };
-            const res = await req('POST', '/api/estudiante/bitacora', payload);
+            const res = await req('POST', '/api/estudiante/bitacora', payload, estudianteToken);
             if (res.status !== 200 || !res.data.success) throw new Error('Registro estructurado falló: ' + JSON.stringify(res.data));
         });
 
@@ -162,4 +192,3 @@ async function runTests() {
 }
 
 runTests();
-
