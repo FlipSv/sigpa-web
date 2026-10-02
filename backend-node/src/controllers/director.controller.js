@@ -323,16 +323,49 @@ async function asignarEstudiante(req, res, next) {
             throw createError(400, `Bloqueo de cupos: La institución ya alcanzó el límite máximo (${inst.CUPOS_DISPONIBLES})`);
         }
 
+        // Insertar en ASIGNACION poblando tanto ID_USUARIO como ID_ESTUDIANTE para compatibilidad total con el esquema Oracle
         const insertSql = `
-            INSERT INTO ASIGNACION (ID_ASIGNACION, ID_ESTUDIANTE, ID_TUTOR, ID_PRACTICA, ID_INSTITUCION, HORAS_ACUMULADAS, ESTADO_PRACTICA, FECHA_ASIGNACION)
-            VALUES ((SELECT NVL(MAX(ID_ASIGNACION), 0) + 1 FROM ASIGNACION), :idEstudiante, :idTutor, :idPractica, :idInstitucion, 0.0, 'EN_CURSO', SYSDATE)
+            INSERT INTO ASIGNACION (
+                ID_ASIGNACION, ID_USUARIO, ID_ESTUDIANTE, ID_TUTOR, ID_PRACTICA, ID_INSTITUCION,
+                HORAS_ACUMULADAS, ESTADO, ESTADO_PRACTICA, FECHA_ASIGNACION
+            )
+            VALUES (
+                (SELECT NVL(MAX(ID_ASIGNACION), 0) + 1 FROM ASIGNACION),
+                :idEstudiante, :idEstudiante, :idTutor, :idPractica, :idInstitucion,
+                0.0, 'APROBADA', 'EN_CURSO', SYSDATE
+            )
         `;
-        await executeQuery(insertSql, {
-            idEstudiante: Number(id_estudiante),
-            idTutor: id_tutor ? Number(id_tutor) : null,
-            idPractica: Number(id_practica),
-            idInstitucion: idInst,
-        });
+        try {
+            await executeQuery(insertSql, {
+                idEstudiante: Number(id_estudiante),
+                idTutor: id_tutor ? Number(id_tutor) : null,
+                idPractica: Number(id_practica),
+                idInstitucion: idInst,
+            });
+        } catch (errInsert) {
+            // Si la columna ID_USUARIO o ESTADO no existiera en alguna versión alterna del esquema (ORA-00904), reintentar sin ella
+            if (errInsert.message && errInsert.message.includes('ORA-00904')) {
+                const fallbackSql = `
+                    INSERT INTO ASIGNACION (
+                        ID_ASIGNACION, ID_ESTUDIANTE, ID_TUTOR, ID_PRACTICA, ID_INSTITUCION,
+                        HORAS_ACUMULADAS, ESTADO_PRACTICA, FECHA_ASIGNACION
+                    )
+                    VALUES (
+                        (SELECT NVL(MAX(ID_ASIGNACION), 0) + 1 FROM ASIGNACION),
+                        :idEstudiante, :idTutor, :idPractica, :idInstitucion,
+                        0.0, 'EN_CURSO', SYSDATE
+                    )
+                `;
+                await executeQuery(fallbackSql, {
+                    idEstudiante: Number(id_estudiante),
+                    idTutor: id_tutor ? Number(id_tutor) : null,
+                    idPractica: Number(id_practica),
+                    idInstitucion: idInst,
+                });
+            } else {
+                throw errInsert;
+            }
+        }
 
         res.json({ success: true, message: 'Estudiante asignado formalmente a la institución y práctica' });
     } catch (err) { next(err); }

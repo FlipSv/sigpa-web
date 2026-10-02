@@ -120,14 +120,27 @@ async function runTests() {
             if (res.status !== 200 || !Array.isArray(res.data.data)) throw new Error('Prácticas falló');
         });
 
+        let testInstitucionId = 1;
         await test('GET /api/director/instituciones', async () => {
             const res = await req('GET', '/api/director/instituciones', null, directorToken);
             if (res.status !== 200 || !Array.isArray(res.data.data)) throw new Error('Instituciones falló');
+            const instValida = res.data.data.find(i => i.convenioActivo && i.ocupados < i.cupos);
+            if (instValida) testInstitucionId = instValida.id;
         });
 
         await test('GET /api/director/asignaciones', async () => {
             const res = await req('GET', '/api/director/asignaciones', null, directorToken);
             if (res.status !== 200 || !Array.isArray(res.data.data)) throw new Error('Asignaciones falló');
+        });
+
+        await test('POST /api/director/asignar (Asignación Institucional Formal)', async () => {
+            const res = await req('POST', '/api/director/asignar', {
+                id_estudiante: 3,
+                id_practica: 1,
+                id_institucion: testInstitucionId,
+                id_tutor: 2
+            }, directorToken);
+            if (res.status !== 200 || !res.data.success) throw new Error('Asignación institucional falló: ' + JSON.stringify(res.data));
         });
 
         console.log('\n--- Módulo Estudiante (Con Token Autorizado) ---');
@@ -178,6 +191,47 @@ async function runTests() {
             };
             const res = await req('POST', '/api/estudiante/bitacora', payload, estudianteToken);
             if (res.status !== 200 || !res.data.success) throw new Error('Registro estructurado falló: ' + JSON.stringify(res.data));
+        });
+
+        await test('7. POST /api/estudiante/bitacora (Rechazar si excede 8 horas)', async () => {
+            const payload = {
+                id_asignacion: idAsignacionEstudiante,
+                visita: 3,
+                horas: 10, // Excede el máximo permitido de 8
+                inicio_motivacion: 'Inicio de sesión.',
+                desarrollo: 'Desarrollo en aula.',
+                cierre_evaluacion: 'Cierre formativo.'
+            };
+            const res = await req('POST', '/api/estudiante/bitacora', payload, estudianteToken);
+            if (res.status !== 400) throw new Error(`Se esperaba 400 pero se obtuvo ${res.status}`);
+        });
+
+        await test('8. POST /api/estudiante/bitacora (Rechazar si fecha es futura)', async () => {
+            const payload = {
+                id_asignacion: idAsignacionEstudiante,
+                visita: 3,
+                horas: 4,
+                fecha: '2099-12-31', // Fecha en el futuro
+                inicio_motivacion: 'Inicio de sesión.',
+                desarrollo: 'Desarrollo en aula.',
+                cierre_evaluacion: 'Cierre formativo.'
+            };
+            const res = await req('POST', '/api/estudiante/bitacora', payload, estudianteToken);
+            if (res.status !== 400) throw new Error(`Se esperaba 400 pero se obtuvo ${res.status}`);
+        });
+
+        await test('9. POST /api/estudiante/bitacora (Aceptar fecha válida y horas <= 8)', async () => {
+            const payload = {
+                id_asignacion: idAsignacionEstudiante,
+                visita: 3,
+                horas: 6,
+                fecha: '2026-09-15', // Fecha pasada válida
+                inicio_motivacion: 'Inicio con dinámicas lúdicas.',
+                desarrollo: 'Talleres colaborativos en el aula.',
+                cierre_evaluacion: 'Evaluación formativa y retroalimentación.'
+            };
+            const res = await req('POST', '/api/estudiante/bitacora', payload, estudianteToken);
+            if (res.status !== 200 || !res.data.success) throw new Error('Falló registro con fecha válida: ' + JSON.stringify(res.data));
         });
 
         console.log(`\n====================================================`);

@@ -1975,5 +1975,180 @@ table.data-table tbody tr:hover { background: #f8fafc; }
     white-space: pre-line;
 }
 
+/* ═══════════════════════════════════════════════════════════════════════
+   ALERTAS Y MODALES INSTITUCIONALES (UDI — SWEETALERT2 & NATIVE POPUPS)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Overlay con desenfoque de fondo */
+.swal2-container {
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    background-color: rgba(15, 23, 42, 0.55) !important;
+    z-index: 10000 !important;
+}
+
+/* Contenedor del Modal */
+.sigpa-swal-popup,
+.swal2-popup {
+    font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+    border-radius: 18px !important;
+    padding: 24px 28px !important;
+    border: 1px solid rgba(15, 43, 92, 0.12) !important;
+    box-shadow: 0 25px 50px -12px rgba(15, 43, 92, 0.28), 0 0 0 1px rgba(255, 255, 255, 0.8) inset !important;
+    background: #ffffff !important;
+}
+
+/* Título */
+.sigpa-swal-title,
+.swal2-title {
+    font-size: 1.25rem !important;
+    font-weight: 700 !important;
+    color: #0f2b5c !important;
+    letter-spacing: -0.02em !important;
+    padding: 10px 0 6px !important;
+}
+
+/* Contenido / Texto */
+.swal2-html-container {
+    font-size: 0.95rem !important;
+    color: #475569 !important;
+    line-height: 1.6 !important;
+    margin: 8px 0 20px !important;
+}
+
+/* Botón de Confirmación / Aceptar (Azul UDI Institucional) */
+.sigpa-swal-confirm-btn,
+.swal2-confirm {
+    background: linear-gradient(135deg, #0f2b5c 0%, #1e3a8a 100%) !important;
+    color: #ffffff !important;
+    font-size: 0.9rem !important;
+    font-weight: 600 !important;
+    border-radius: 9px !important;
+    padding: 11px 24px !important;
+    box-shadow: 0 4px 14px rgba(15, 43, 92, 0.25) !important;
+    border: none !important;
+    transition: all 0.2s ease !important;
+}
+
+.sigpa-swal-confirm-btn:hover,
+.swal2-confirm:hover {
+    background: linear-gradient(135deg, #163e7c 0%, #2563eb 100%) !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 6px 18px rgba(15, 43, 92, 0.32) !important;
+}
+
+/* Botón Cancelar (Gris neutro sobrio) */
+.sigpa-swal-cancel-btn,
+.swal2-cancel {
+    background: #f1f5f9 !important;
+    color: #475569 !important;
+    font-size: 0.9rem !important;
+    font-weight: 600 !important;
+    border-radius: 9px !important;
+    padding: 11px 22px !important;
+    border: 1px solid #cbd5e1 !important;
+    transition: all 0.2s ease !important;
+    margin-right: 10px !important;
+}
+
+.sigpa-swal-cancel-btn:hover,
+.swal2-cancel:hover {
+    background: #e2e8f0 !important;
+    color: #1e293b !important;
+}
+
+/* Íconos oficiales personalizados */
+.swal2-icon.swal2-success {
+    border-color: #10b981 !important;
+    color: #10b981 !important;
+}
+.swal2-icon.swal2-warning {
+    border-color: #f59e0b !important;
+    color: #f59e0b !important;
+}
+.swal2-icon.swal2-error {
+    border-color: #ef4444 !important;
+    color: #ef4444 !important;
+}
+.swal2-icon.swal2-info {
+    border-color: #0f2b5c !important;
+    color: #0f2b5c !important;
+}
+
+/* Fallback DOM Modal Institucional */
+.sigpa-modal-fallback-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(15, 23, 42, 0.6);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10500;
+    animation: sigpaFadeIn 0.2s ease-out;
+}
+
+.sigpa-modal-fallback-card {
+    background: #ffffff;
+    width: 90%;
+    max-width: 440px;
+    border-radius: 18px;
+    padding: 26px 28px;
+    box-shadow: 0 25px 50px -12px rgba(15, 43, 92, 0.28);
+    border: 1px solid rgba(15, 43, 92, 0.1);
+    text-align: center;
+    animation: sigpaScaleUp 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.sigpa-modal-fallback-icon {
+    width: 58px;
+    height: 58px;
+    border-radius: 50%;
+    margin: 0 auto 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 26px;
+}
+
+.sigpa-modal-fallback-icon.info { background: #eff6ff; color: #1e40af; border: 2px solid #bfdbfe; }
+.sigpa-modal-fallback-icon.success { background: #ecfdf5; color: #047857; border: 2px solid #a7f3d0; }
+.sigpa-modal-fallback-icon.warning { background: #fffbeb; color: #b45309; border: 2px solid #fde68a; }
+.sigpa-modal-fallback-icon.error { background: #fef2f2; color: #b91c1c; border: 2px solid #fecaca; }
+
+.sigpa-modal-fallback-title {
+    font-size: 1.22rem;
+    font-weight: 700;
+    color: #0f2b5c;
+    margin-bottom: 8px;
+}
+
+.sigpa-modal-fallback-msg {
+    font-size: 0.94rem;
+    color: #475569;
+    line-height: 1.55;
+    margin-bottom: 22px;
+}
+
+.sigpa-modal-fallback-actions {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+}
+
+@keyframes sigpaFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes sigpaScaleUp {
+    from { opacity: 0; transform: scale(0.92); }
+    to { opacity: 1; transform: scale(1); }
+}
+
 
 

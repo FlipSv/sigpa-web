@@ -6,7 +6,9 @@
 
 'use strict';
 
-const API_BASE = 'http://localhost:8081/api';
+const API_BASE = window.location.origin.startsWith('http')
+    ? `${window.location.origin}/api`
+    : 'http://localhost:8081/api';
 
 /* ═══════════════════════════════════════════════════════════════════════
    HTTP INTERCEPTOR (JWT & AUTH HEADER)
@@ -46,6 +48,202 @@ const API_BASE = 'http://localhost:8081/api';
         return response;
     };
 })();
+
+/* ═══════════════════════════════════════════════════════════════════════
+   ALERTAS Y MODALES INSTITUCIONALES (UDI — SWEETALERT2 & FALLBACK DOM)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Muestra una alerta institucional estilizada con la identidad visual de la UDI.
+ * Si SweetAlert2 está cargado, lo utiliza con la paleta de la universidad.
+ * Si no está disponible (modo offline o bloqueo CDN), usa un modal institucional en el DOM.
+ * @param {string|Object} title - Título del diálogo o payload de opciones
+ * @param {string} [message] - Mensaje a mostrar
+ * @param {'info'|'success'|'warning'|'error'|'question'} [icon='info'] - Tipo de alerta
+ * @param {Object} [customOptions={}] - Opciones adicionales
+ * @returns {Promise<any>}
+ */
+function sigpaAlert(title, message, icon = 'info', customOptions = {}) {
+    if (typeof title === 'object' && title !== null) {
+        customOptions = title;
+        title = customOptions.title || 'Notificación SIGPA';
+        message = customOptions.text || customOptions.message || customOptions.html || '';
+        icon = customOptions.icon || 'info';
+    }
+
+    const cleanMsg = String(message || '').replace(/^[⚠️✅ℹ️❌❓]\s*/, '');
+    const cleanTitle = String(title || 'Notificación SIGPA').replace(/^[⚠️✅ℹ️❌❓]\s*/, '');
+
+    if (typeof Swal !== 'undefined') {
+        return Swal.fire({
+            title: cleanTitle,
+            text: cleanMsg,
+            icon: icon,
+            confirmButtonText: customOptions.confirmButtonText || 'Entendido',
+            confirmButtonColor: '#0f2b5c',
+            customClass: {
+                popup: 'sigpa-swal-popup',
+                title: 'sigpa-swal-title',
+                confirmButton: 'sigpa-swal-confirm-btn',
+            },
+            ...customOptions
+        });
+    }
+
+    return _sigpaDomModal({
+        title: cleanTitle,
+        message: cleanMsg,
+        icon: icon,
+        confirmText: customOptions.confirmButtonText || 'Entendido'
+    });
+}
+
+/**
+ * Muestra un modal de confirmación institucional asíncrono (reemplazo de confirm() nativo).
+ * @param {string} title
+ * @param {string} message
+ * @param {string} [confirmText='Confirmar']
+ * @param {string} [cancelText='Cancelar']
+ * @param {'warning'|'question'|'info'} [icon='warning']
+ * @returns {Promise<boolean>}
+ */
+async function sigpaConfirm(title, message, confirmText = 'Confirmar', cancelText = 'Cancelar', icon = 'warning') {
+    const cleanMsg = String(message || '').replace(/^[⚠️✅ℹ️❌❓]\s*/, '');
+    const cleanTitle = String(title || 'Confirmar Acción').replace(/^[⚠️✅ℹ️❌❓]\s*/, '');
+
+    if (typeof Swal !== 'undefined') {
+        const res = await Swal.fire({
+            title: cleanTitle,
+            text: cleanMsg,
+            icon: icon,
+            showCancelButton: true,
+            confirmButtonText: confirmText,
+            cancelButtonText: cancelText,
+            confirmButtonColor: '#0f2b5c',
+            cancelButtonColor: '#64748b',
+            reverseButtons: true,
+            focusCancel: true,
+            customClass: {
+                popup: 'sigpa-swal-popup',
+                title: 'sigpa-swal-title',
+                confirmButton: 'sigpa-swal-confirm-btn',
+                cancelButton: 'sigpa-swal-cancel-btn',
+            }
+        });
+        return Boolean(res.isConfirmed);
+    }
+
+    return new Promise(resolve => {
+        _sigpaDomModal({
+            title: cleanTitle,
+            message: cleanMsg,
+            icon: icon,
+            showCancel: true,
+            confirmText: confirmText,
+            cancelText: cancelText,
+            onConfirm: () => resolve(true),
+            onCancel: () => resolve(false)
+        });
+    });
+}
+
+/**
+ * Notificación tipo Toast rápida en la esquina superior derecha
+ * @param {string} message
+ * @param {'success'|'info'|'warning'|'error'} [icon='success']
+ */
+function sigpaToast(message, icon = 'success') {
+    const cleanMsg = String(message || '').replace(/^[⚠️✅ℹ️❌❓]\s*/, '');
+    if (typeof Swal !== 'undefined') {
+        const Toast = Swal.mixin({
+            toast: true,
+            position: 'top-end',
+            showConfirmButton: false,
+            timer: 3500,
+            timerProgressBar: true,
+            didOpen: (toast) => {
+                toast.addEventListener('mouseenter', Swal.stopTimer);
+                toast.addEventListener('mouseleave', Swal.resumeTimer);
+            }
+        });
+        return Toast.fire({ icon, title: cleanMsg });
+    }
+    console.log(`[SIGPA Toast - ${icon}]: ${cleanMsg}`);
+}
+
+/**
+ * Renderizador de modal DOM fallback en caso de bloqueo de red CDN
+ */
+function _sigpaDomModal(opts) {
+    const overlay = document.createElement('div');
+    overlay.className = 'sigpa-modal-fallback-overlay';
+
+    const iconsMap = {
+        success: '✓',
+        error: '✕',
+        warning: '!',
+        info: 'ℹ',
+        question: '?'
+    };
+    const iconChar = iconsMap[opts.icon] || 'ℹ';
+
+    overlay.innerHTML = `
+        <div class="sigpa-modal-fallback-card" onclick="event.stopPropagation()">
+            <div class="sigpa-modal-fallback-icon ${opts.icon || 'info'}">
+                ${iconChar}
+            </div>
+            <h4 class="sigpa-modal-fallback-title">${opts.title || 'SIGPA UDI'}</h4>
+            <p class="sigpa-modal-fallback-msg">${opts.message || ''}</p>
+            <div class="sigpa-modal-fallback-actions">
+                ${opts.showCancel ? `<button type="button" class="btn-secondary sigpa-cancel-btn" style="min-width:100px;">${opts.cancelText || 'Cancelar'}</button>` : ''}
+                <button type="button" class="btn-primary-sm sigpa-confirm-btn" style="min-width:110px;">${opts.confirmText || 'Entendido'}</button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    return new Promise(resolve => {
+        const removeModal = (result) => {
+            if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+            resolve(result);
+        };
+
+        const confirmBtn = overlay.querySelector('.sigpa-confirm-btn');
+        if (confirmBtn) {
+            confirmBtn.addEventListener('click', () => {
+                if (opts.onConfirm) opts.onConfirm();
+                removeModal(true);
+            });
+            confirmBtn.focus();
+        }
+
+        const cancelBtn = overlay.querySelector('.sigpa-cancel-btn');
+        if (cancelBtn) {
+            cancelBtn.addEventListener('click', () => {
+                if (opts.onCancel) opts.onCancel();
+                removeModal(false);
+            });
+        }
+
+        overlay.addEventListener('click', () => {
+            if (opts.showCancel) {
+                if (opts.onCancel) opts.onCancel();
+                removeModal(false);
+            } else {
+                removeModal(true);
+            }
+        });
+    });
+}
+
+// Sobrescribir window.alert nativo globalmente para redirigir cualquier alerta no controlada
+if (!window._nativeAlert) {
+    window._nativeAlert = window.alert;
+    window.alert = function(msg) {
+        sigpaAlert('Notificación Institucional', msg, 'info');
+    };
+}
 
 /* ═══════════════════════════════════════════════════════════════════════
    CHART.JS GLOBAL CONFIG
@@ -217,7 +415,7 @@ function setupRoleNav(user) {
             ${navLabel('ADMINISTRACIÓN')}
             ${navItem('👤', 'Gestión de Cuentas',    "loadDirectorView('usuarios', event.currentTarget)")}
             ${navLabel('REPORTES')}
-            ${navItem('📥', 'Exportar Informes',     "alert('Función de exportación PDF en desarrollo')")}
+            ${navItem('📥', 'Exportar Informes',     "sigpaAlert('Módulo de Informes', 'La función de exportación PDF de informes se encuentra en fase de integración institucional.', 'info')")}
         `;
         setActive(nav.querySelectorAll('.nav-item')[0]);
         setTopbarCTA('➕', 'Nueva Práctica', "openModalNuevaPractica()");
@@ -246,7 +444,7 @@ function setupRoleNav(user) {
             ${navItem('📊', 'Estadísticas del Grupo', "loadTutorView('bitacoras', event.currentTarget)")}
         `;
         setActive(nav.querySelectorAll('.nav-item')[0]);
-        setTopbarCTA('📅', 'Agendar Visita', "alert('Agenda de visitas en desarrollo')");
+        setTopbarCTA('📅', 'Agendar Visita', "sigpaAlert('Agenda de Visitas', 'El módulo de agendamiento de visitas de supervisión se encuentra en fase de despliegue.', 'info')");
         loadTutorView('bitacoras');
 
     } else if (rol === 'ASESOR') {
@@ -255,7 +453,7 @@ function setupRoleNav(user) {
             ${navItem('🏫', 'Practicantes en Aula',   "loadAsesorView('estudiantes', event.currentTarget)")}
             ${navItem('🔍', 'Bitácoras & Visitas',    "loadAsesorView('bitacoras', event.currentTarget)")}
             ${navLabel('REPORTES')}
-            ${navItem('📋', 'Reporte de Avales',      "alert('Reporte de avales en desarrollo')")}
+            ${navItem('📋', 'Reporte de Avales',      "sigpaAlert('Reporte de Avales', 'El reporte consolidado de avales in situ estará disponible en la próxima actualización.', 'info')")}
         `;
         setActive(nav.querySelectorAll('.nav-item')[0]);
         loadAsesorView('estudiantes');
@@ -404,7 +602,7 @@ async function loadDirectorView(tab, btn) {
                 <button class="btn-primary-sm" onclick="openModalNuevaPractica()">➕ Nueva Práctica</button>
                 <button class="btn-secondary" onclick="loadDirectorView('instituciones')">🏫 Registrar Institución</button>
                 <button class="btn-secondary" onclick="openModalAsignarEstudiante()">👤 Asignar Estudiante</button>
-                <button class="btn-secondary" onclick="alert('Generando informe PDF...')">📥 Informe de Acreditación</button>
+                <button class="btn-secondary" onclick="sigpaAlert('Informe de Acreditación', 'Generando consolidado de evidencias y métricas institucionales para acreditación CNA...', 'info')">📥 Informe de Acreditación</button>
             </div>
 
             <!-- Charts Row -->
@@ -1084,7 +1282,7 @@ async function loadEstudianteView(tab, btn) {
                                     <strong>Guía Pedagógica:</strong> Describe la ambientación del espacio, la contextualización de la temática y las dinámicas para activar los conocimientos previos de los niños.
                                 </div>
 
-                                <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+                                <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:16px;margin-bottom:16px;">
                                     <div>
                                         <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">Número de Visita *</label>
                                         <div class="input-wrapper">
@@ -1097,10 +1295,20 @@ async function loadEstudianteView(tab, btn) {
                                         </div>
                                     </div>
                                     <div>
-                                        <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">Horas Realizadas en Sesión *</label>
+                                        <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">Fecha de la Sesión *</label>
                                         <div class="input-wrapper">
-                                            <input type="number" id="b-horas" value="16" min="1" max="40" step="0.5" required placeholder="Ej. 16">
+                                            <input type="date" id="b-fecha" required
+                                                max="${new Date().toISOString().split('T')[0]}"
+                                                value="${new Date().toISOString().split('T')[0]}">
                                         </div>
+                                        <small style="font-size:11px;color:#64748b;display:block;margin-top:3px;">📅 No se permiten fechas futuras</small>
+                                    </div>
+                                    <div>
+                                        <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">Horas Realizadas en Sesión * <span style="font-weight:500;color:#ea580c;">(Máx. 8h)</span></label>
+                                        <div class="input-wrapper">
+                                            <input type="number" id="b-horas" value="4" min="1" max="8" step="0.5" required placeholder="Ej. 4">
+                                        </div>
+                                        <small style="font-size:11px;color:#64748b;display:block;margin-top:3px;">⏱️ Máximo 8 horas por jornada</small>
                                     </div>
                                 </div>
 
@@ -1444,17 +1652,51 @@ async function loadEstudianteView(tab, btn) {
 function stepperGo(step) {
     if (step < 1 || step > 4) return;
 
-    // Validación básica al avanzar
-    if (step > 1 && !document.getElementById('b-inicio').value.trim()) {
-        alert('⚠️ Debes diligenciar la Fase de Inicio y Motivación antes de continuar.');
-        return;
+    // Validación al avanzar desde el Paso 1
+    if (step > 1) {
+        // Validación de fecha no futura
+        const fechaEl = document.getElementById('b-fecha');
+        if (fechaEl) {
+            const fechaVal = fechaEl.value;
+            if (!fechaVal) {
+                sigpaAlert('Fecha Requerida', 'Por favor selecciona la fecha en la que realizaste la sesión de práctica pedagógica.', 'warning');
+                return;
+            }
+            const hoy = new Date();
+            hoy.setHours(23, 59, 59, 999);
+            const fechaSesion = new Date(fechaVal + 'T00:00:00');
+            if (fechaSesion > hoy) {
+                sigpaAlert('Fecha No Válida', 'La fecha de la sesión no puede ser futura. Registra la fecha real de ejecución.', 'warning');
+                return;
+            }
+        }
+
+        // Validación de horas (máximo 8h por jornada)
+        const horasEl = document.getElementById('b-horas');
+        if (horasEl) {
+            const horas = parseFloat(horasEl.value);
+            if (isNaN(horas) || horas <= 0) {
+                sigpaAlert('Horas Requeridas', 'Ingresa una cantidad de horas válida para la sesión (mínimo 1 hora).', 'warning');
+                return;
+            }
+            if (horas > 8) {
+                sigpaAlert('Límite de Horas Excedido', 'El reglamento institucional de prácticas prohíbe registrar más de 8 horas en una sola jornada pedagógica.', 'warning');
+                return;
+            }
+        }
+
+        if (!document.getElementById('b-inicio').value.trim()) {
+            sigpaAlert('Fase 1 Incompleta', 'Debes diligenciar las estrategias de la Fase de Inicio y Motivación antes de continuar.', 'warning');
+            return;
+        }
     }
+
     if (step > 2 && !document.getElementById('b-desarrollo').value.trim()) {
-        alert('⚠️ Debes diligenciar las actividades de la Fase de Desarrollo antes de continuar.');
+        sigpaAlert('Fase 2 Incompleta', 'Debes diligenciar las actividades de la Fase de Desarrollo antes de continuar.', 'warning');
         return;
     }
     if (step > 3 && !document.getElementById('b-cierre').value.trim()) {
-        alert('⚠️ Debes diligenciar la Fase de Cierre y Evaluación antes de continuar.');
+        sigpaAlert('Fase 3 Incompleta', 'Debes diligenciar la Fase de Cierre y Evaluación antes de continuar.', 'warning');
         return;
     }
 
@@ -1535,6 +1777,34 @@ async function cargarPreguntasGuiaEnStepper(idPractica, visita) {
 
 async function handleGuardarBitacoraAsistente(e, idAsignacion, idPractica) {
     e.preventDefault();
+
+    // Validar fecha no futura
+    const fechaEl = document.getElementById('b-fecha');
+    const fechaVal = fechaEl ? fechaEl.value : '';
+    if (!fechaVal) {
+        sigpaAlert('Fecha Requerida', 'Por favor indica la fecha en que se llevó a cabo la sesión de práctica pedagógica.', 'warning');
+        return;
+    }
+    const hoy = new Date();
+    hoy.setHours(23, 59, 59, 999);
+    const fechaSesion = new Date(fechaVal + 'T00:00:00');
+    if (fechaSesion > hoy) {
+        sigpaAlert('Fecha No Válida', 'La fecha de la sesión no puede ser una fecha futura. Registra la fecha real de intervención.', 'warning');
+        return;
+    }
+
+    // Validar horas por jornada (máximo 8h)
+    const horasEl = document.getElementById('b-horas');
+    const horasNum = parseFloat(horasEl ? horasEl.value : 0);
+    if (isNaN(horasNum) || horasNum <= 0) {
+        sigpaAlert('Horas Requeridas', 'Ingresa una cantidad de horas válida para la sesión (mínimo 1 hora).', 'warning');
+        return;
+    }
+    if (horasNum > 8) {
+        sigpaAlert('Límite de Horas Excedido', 'El reglamento de prácticas de la UDI prohíbe registrar más de 8 horas en una sola jornada pedagógica.', 'warning');
+        return;
+    }
+
     const btn = document.getElementById('btnEnviarBitacora');
     if (btn) btn.disabled = true;
 
@@ -1555,7 +1825,8 @@ async function handleGuardarBitacoraAsistente(e, idAsignacion, idPractica) {
     const payload = {
         id_asignacion: idAsignacion,
         visita: document.getElementById('b-visita').value,
-        horas: document.getElementById('b-horas').value,
+        fecha: fechaVal,
+        horas: horasNum,
         inicio_motivacion: document.getElementById('b-inicio').value.trim(),
         desarrollo: document.getElementById('b-desarrollo').value.trim(),
         cierre_evaluacion: document.getElementById('b-cierre').value.trim(),
@@ -1571,14 +1842,14 @@ async function handleGuardarBitacoraAsistente(e, idAsignacion, idPractica) {
         });
         const d = await res.json();
         if (d.success) {
-            alert('✅ ¡Diario de campo pedagógico guardado con éxito! Tu tutor ha recibido la notificación.');
+            await sigpaAlert('¡Diario de Campo Registrado!', 'Tu bitácora y diario de campo pedagógico han sido guardados con éxito. Tu tutor académico ha recibido la notificación correspondiente.', 'success');
             loadEstudianteView('resumen');
         } else {
-            alert('⚠️ ' + (d.message || 'Error al guardar bitácora'));
+            sigpaAlert('Atención', d.message || 'Error al guardar la bitácora', 'warning');
             if (btn) btn.disabled = false;
         }
     } catch (err) {
-        alert('Error de conexión: ' + err.message);
+        sigpaAlert('Error de Conexión', 'No fue posible registrar la bitácora: ' + err.message, 'error');
         if (btn) btn.disabled = false;
     }
 }
@@ -1924,8 +2195,8 @@ async function loadTutorView(tab, btn) {
             <!-- Quick Actions -->
             <div class="quick-actions-bar">
                 <span class="quick-actions-label">Acciones:</span>
-                <button class="btn-primary-sm" onclick="alert('Función de aprobación masiva en desarrollo')">✅ Aprobar Lote sin Observaciones</button>
-                <button class="btn-secondary" onclick="alert('Abriendo agenda...')">📅 Agendar Visita de Supervisión</button>
+                <button class="btn-primary-sm" onclick="sigpaAlert('Aprobación en Lote', 'La función de aprobación masiva de bitácoras sin observaciones se encuentra en desarrollo.', 'info')">✅ Aprobar Lote sin Observaciones</button>
+                <button class="btn-secondary" onclick="sigpaAlert('Agenda de Visitas', 'El calendario interactivo de visitas de supervisión docente se encuentra en desarrollo.', 'info')">📅 Agendar Visita de Supervisión</button>
                 <button class="btn-secondary" onclick="loadTutorView('estudiantes')">👥 Ver Mis Practicantes</button>
             </div>
 
@@ -2183,7 +2454,7 @@ async function loadAsesorView(tab, btn) {
         <!-- Quick Actions -->
         <div class="quick-actions-bar">
             <span class="quick-actions-label">Acciones:</span>
-            <button class="btn-secondary" onclick="alert('Reporte de avales en desarrollo')">📋 Reporte de Avales</button>
+            <button class="btn-secondary" onclick="sigpaAlert('Reporte de Avales', 'El reporte consolidado de avales institucionales se encuentra en desarrollo.', 'info')">📋 Reporte de Avales</button>
         </div>
 
         <!-- Charts Row -->
@@ -2334,8 +2605,8 @@ async function cambiarEstadoPractica(id, nuevoEstado) {
         });
         const d = await res.json();
         if (d.success) { loadDirectorView('kpis'); }
-        else alert(d.message);
-    } catch (e) { alert('Error: ' + e.message); }
+        else sigpaAlert('Estado de Práctica', d.message, 'warning');
+    } catch (e) { sigpaAlert('Error de Conexión', e.message, 'error'); }
 }
 
 function openModalNuevaPractica() {
@@ -2351,7 +2622,7 @@ function openModalNuevaPractica() {
             </div>
             <div class="modal-footer">
                 <button class="btn-secondary" onclick="closeModal()">Cerrar</button>
-                <button class="btn-primary-sm" onclick="alert('Módulo de nueva práctica en desarrollo');closeModal()">Crear Práctica</button>
+                <button class="btn-primary-sm" onclick="sigpaAlert('Módulo en Desarrollo', 'El catálogo institucional de creación de prácticas se encuentra en fase de desarrollo.');closeModal()">Crear Práctica</button>
             </div>
         </div>
     </div>`;
@@ -2416,8 +2687,8 @@ async function handleGuardarInstitucion(e) {
         });
         const d = await res.json();
         if (d.success) { closeModal(); loadDirectorView('instituciones'); }
-        else alert(d.message);
-    } catch (err) { alert('Error: ' + err.message); }
+        else sigpaAlert('Registro Institucional', d.message, 'warning');
+    } catch (err) { sigpaAlert('Error de Conexión', err.message, 'error'); }
 }
 
 async function openModalAsignarEstudiante() {
@@ -2485,7 +2756,7 @@ async function openModalAsignarEstudiante() {
         </div>`;
     } catch (e) {
         mc.innerHTML = '';
-        alert('Error al cargar formulario: ' + e.message);
+        sigpaAlert('Error de Carga', 'Error al cargar formulario: ' + e.message, 'error');
     }
 }
 
@@ -2503,9 +2774,14 @@ async function handleGuardarAsignacion(e) {
             body: JSON.stringify(payload)
         });
         const d = await res.json();
-        if (d.success) { closeModal(); loadDirectorView('asignaciones'); }
-        else alert(d.message);
-    } catch (err) { alert('Error: ' + err.message); }
+        if (d.success) {
+            closeModal();
+            await sigpaAlert('Asignación Formalizada', d.message || 'El estudiante ha sido asignado formalmente a la institución y práctica.', 'success');
+            loadDirectorView('asignaciones');
+        } else {
+            sigpaAlert('Asignación Institucional', d.message || 'No fue posible completar la asignación institucional.', 'warning');
+        }
+    } catch (err) { sigpaAlert('Error de Conexión', err.message, 'error'); }
 }
 
 /* ── Modal: Crear Nuevo Usuario ─────────────────────────────────────── */
@@ -2588,21 +2864,28 @@ async function handleGuardarNuevoUsuario(e) {
         const d = await res.json();
         if (d.success) {
             closeModal();
-            alert('✅ ' + d.message);
+            await sigpaAlert('Usuario Registrado', d.message, 'success');
             loadDirectorView('usuarios');
         } else {
-            alert('⚠️ ' + (d.message || 'No se pudo crear la cuenta'));
+            sigpaAlert('Atención', d.message || 'No se pudo crear la cuenta', 'warning');
             if (btn) btn.disabled = false;
         }
     } catch (err) {
-        alert('Error de conexión: ' + err.message);
+        sigpaAlert('Error de Conexión', 'Error de conexión: ' + err.message, 'error');
         if (btn) btn.disabled = false;
     }
 }
 
 async function cambiarEstadoUsuario(idUsuario, nuevoEstado) {
     const accion = nuevoEstado === 'S' ? 'activar' : 'desactivar';
-    if (!confirm(`¿Estás seguro de que deseas ${accion} esta cuenta de usuario?`)) return;
+    const confirmado = await sigpaConfirm(
+        'Confirmar Cambio de Estado',
+        `¿Estás seguro de que deseas ${accion} esta cuenta de usuario en el sistema institucional?`,
+        `Sí, ${accion}`,
+        'Cancelar',
+        'warning'
+    );
+    if (!confirmado) return;
 
     try {
         const res = await fetch(`${API_BASE}/director/cambiar_estado_usuario`, {
@@ -2614,10 +2897,10 @@ async function cambiarEstadoUsuario(idUsuario, nuevoEstado) {
         if (d.success) {
             loadDirectorView('usuarios');
         } else {
-            alert('⚠️ ' + (d.message || 'Error al cambiar estado'));
+            sigpaAlert('Estado de Cuenta', d.message || 'Error al cambiar estado', 'warning');
         }
     } catch (err) {
-        alert('Error: ' + err.message);
+        sigpaAlert('Error de Conexión', err.message, 'error');
     }
 }
 
@@ -2671,9 +2954,14 @@ async function handleGuardarCalificacion(e, idBitacora, idEvaluador) {
             body: JSON.stringify({ id_bitacora: idBitacora, id_evaluador: idEvaluador, nota, comentarios })
         });
         const d = await res.json();
-        if (d.success) { closeModal(); loadTutorView('bitacoras'); }
-        else alert(d.message);
-    } catch (err) { alert('Error: ' + err.message); }
+        if (d.success) {
+            closeModal();
+            await sigpaAlert('Calificación Registrada', 'La evaluación formativa de la bitácora ha sido guardada exitosamente.', 'success');
+            loadTutorView('bitacoras');
+        } else {
+            sigpaAlert('Atención', d.message, 'warning');
+        }
+    } catch (err) { sigpaAlert('Error de Conexión', err.message, 'error'); }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -2720,9 +3008,14 @@ async function handleGuardarAsesorEval(e, idBitacora, idEvaluador) {
             body: JSON.stringify({ id_bitacora: idBitacora, id_evaluador: idEvaluador, nota: 5.0, comentarios })
         });
         const d = await res.json();
-        if (d.success) { closeModal(); loadAsesorView('estudiantes'); }
-        else alert(d.message);
-    } catch (err) { alert('Error: ' + err.message); }
+        if (d.success) {
+            closeModal();
+            await sigpaAlert('Aval In Situ Registrado', 'El aval presencial ha sido registrado y computado exitosamente.', 'success');
+            loadAsesorView('estudiantes');
+        } else {
+            sigpaAlert('Atención', d.message, 'warning');
+        }
+    } catch (err) { sigpaAlert('Error de Conexión', err.message, 'error'); }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -2731,10 +3024,31 @@ async function handleGuardarAsesorEval(e, idBitacora, idEvaluador) {
 
 async function handleGuardarBitacora(e, idAsignacion) {
     e.preventDefault();
+    const fechaEl = document.getElementById('b-fecha');
+    const fechaVal = fechaEl ? fechaEl.value : '';
+    if (fechaVal) {
+        const hoy = new Date();
+        hoy.setHours(23, 59, 59, 999);
+        const fechaSesion = new Date(fechaVal + 'T00:00:00');
+        if (fechaSesion > hoy) {
+            sigpaAlert('Fecha No Válida', 'La fecha de la sesión no puede ser futura.', 'warning');
+            return;
+        }
+    }
+    const horasNum = parseFloat(document.getElementById('b-horas').value);
+    if (isNaN(horasNum) || horasNum <= 0) {
+        sigpaAlert('Horas Requeridas', 'Ingresa una cantidad de horas válida (mínimo 1 hora).', 'warning');
+        return;
+    }
+    if (horasNum > 8) {
+        sigpaAlert('Límite de Horas Excedido', 'El reglamento institucional prohíbe registrar más de 8 horas en una sola jornada pedagógica.', 'warning');
+        return;
+    }
     const payload = {
         id_asignacion: idAsignacion,
         visita:        document.getElementById('b-visita').value,
-        horas:         document.getElementById('b-horas').value,
+        fecha:         fechaVal || undefined,
+        horas:         horasNum,
         actividades:   document.getElementById('b-actividades').value.trim(),
         observaciones: document.getElementById('b-observaciones').value.trim(),
         evidencia:     document.getElementById('b-evidencia').value.trim(),
@@ -2745,9 +3059,13 @@ async function handleGuardarBitacora(e, idAsignacion) {
             body: JSON.stringify(payload)
         });
         const d = await res.json();
-        if (d.success) { alert('✅ ¡Bitácora registrada con éxito! Tu tutor recibirá una notificación.'); loadEstudianteView('resumen'); }
-        else alert(d.message);
-    } catch (err) { alert('Error: ' + err.message); }
+        if (d.success) {
+            await sigpaAlert('¡Bitácora Registrada!', '¡Bitácora registrada con éxito! Tu tutor recibirá una notificación.', 'success');
+            loadEstudianteView('resumen');
+        } else {
+            sigpaAlert('Atención', d.message, 'warning');
+        }
+    } catch (err) { sigpaAlert('Error de Conexión', err.message, 'error'); }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════

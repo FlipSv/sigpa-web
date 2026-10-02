@@ -6,7 +6,9 @@
   "scripts": {
     "start": "node src/app.js",
     "dev": "nodemon src/app.js",
-    "setup-db": "node src/config/setup.js"
+    "setup-db": "node src/config/setup.js",
+    "test": "node test_api.js",
+    "test:auth": "node test_auth_unit.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

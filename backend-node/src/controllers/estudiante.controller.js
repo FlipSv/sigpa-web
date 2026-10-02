@@ -18,10 +18,37 @@
 const { executeQuery } = require('../config/database');
 const { createError } = require('../middlewares/errorHandler');
 
+/**
+ * Extrae el ID del estudiante desde el query param o desde el JWT del usuario autenticado.
+ * Roles supervisores (DIRECTOR, TUTOR, ASESOR) pueden consultar datos de cualquier estudiante
+ * pasando ?id_estudiante=X. El estudiante solo puede consultar sus propios datos.
+ */
+function resolverIdEstudiante(req) {
+    const fromQuery = req.query.id_estudiante;
+    const fromJWT   = req.usuario && req.usuario.id;
+    const rol       = req.usuario && req.usuario.rol ? String(req.usuario.rol).toUpperCase() : '';
+
+    if (fromQuery) {
+        // Roles supervisores pueden consultar cualquier estudiante
+        if (['DIRECTOR', 'TUTOR', 'COORDINADOR', 'ASESOR'].includes(rol)) {
+            return Number(fromQuery);
+        }
+        // El estudiante solo puede consultar sus propios datos
+        if (Number(fromQuery) !== fromJWT) {
+            throw createError(403, 'No tienes permiso para consultar datos de otro estudiante');
+        }
+        return Number(fromQuery);
+    }
+
+    if (fromJWT) return Number(fromJWT);
+
+    throw createError(400, 'El parámetro id_estudiante es obligatorio');
+}
+
 /* ── GET /api/estudiante/asignacion ──────────────────────────────────── */
 async function getAsignacion(req, res, next) {
     try {
-        const idEstudiante = Number(req.query.id_estudiante || 4);
+        const idEstudiante = resolverIdEstudiante(req);
 
         const sql = `
             SELECT * FROM (
@@ -74,7 +101,7 @@ async function getAsignacion(req, res, next) {
 /* ── GET /api/estudiante/progreso (Medidor Predictivo / Semáforo) ────── */
 async function getProgreso(req, res, next) {
     try {
-        const idEstudiante = Number(req.query.id_estudiante || 4);
+        const idEstudiante = resolverIdEstudiante(req);
 
         // 1. Obtener Asignación
         const asigSql = `
@@ -193,7 +220,7 @@ async function getProgreso(req, res, next) {
 /* ── GET /api/estudiante/bitacoras ───────────────────────────────────── */
 async function getBitacoras(req, res, next) {
     try {
-        const idEstudiante = Number(req.query.id_estudiante || 4);
+        const idEstudiante = resolverIdEstudiante(req);
 
         const sql = `
             SELECT b.ID_BITACORA, b.NUMERO_VISITA,
@@ -232,7 +259,7 @@ async function getBitacoras(req, res, next) {
 /* ── GET /api/estudiante/timeline (Línea de Tiempo de Evolución) ─────── */
 async function getTimeline(req, res, next) {
     try {
-        const idEstudiante = Number(req.query.id_estudiante || 4);
+        const idEstudiante = resolverIdEstudiante(req);
 
         const sql = `
             SELECT b.ID_BITACORA, b.NUMERO_VISITA,
@@ -309,7 +336,7 @@ async function getTimeline(req, res, next) {
 /* ── GET /api/estudiante/evidencias (Portafolio Digital de Evidencias) ── */
 async function getEvidencias(req, res, next) {
     try {
-        const idEstudiante = Number(req.query.id_estudiante || 4);
+        const idEstudiante = resolverIdEstudiante(req);
 
         const sql = `
             SELECT b.ID_BITACORA, b.NUMERO_VISITA,
@@ -375,7 +402,7 @@ async function getEvidencias(req, res, next) {
 /* ── GET /api/estudiante/evaluaciones ────────────────────────────────── */
 async function getEvaluaciones(req, res, next) {
     try {
-        const idEstudiante = Number(req.query.id_estudiante || 4);
+        const idEstudiante = resolverIdEstudiante(req);
 
         const sql = `
             SELECT e.ID_EVALUACION, e.TIPO_EVALUADOR, e.NOTA, e.COMENTARIOS,
@@ -414,8 +441,12 @@ async function getEvaluaciones(req, res, next) {
 /* ── GET /api/estudiante/preguntas_guia & /preguntas-guia/:id_practica/:visita ── */
 async function getPreguntasGuia(req, res, next) {
     try {
-        const idPractica = Number(req.params.id_practica || req.query.id_practica || 5);
-        const visita = Number(req.params.visita || req.query.visita || 1);
+        const rawPractica = req.params.id_practica || req.query.id_practica;
+        const rawVisita   = req.params.visita || req.query.visita;
+        if (!rawPractica) throw createError(400, 'El parámetro id_practica es obligatorio');
+        if (!rawVisita)   throw createError(400, 'El parámetro visita es obligatorio');
+        const idPractica = Number(rawPractica);
+        const visita = Number(rawVisita);
 
         const sql = `
             SELECT ID_PREGUNTA, TEXTO_PREGUNTA, ORDEN
@@ -496,6 +527,7 @@ async function registrarBitacora(req, res, next) {
             id_asignacion,
             visita,
             horas,
+            fecha,
             actividades,
             observaciones,
             evidencia,
@@ -513,6 +545,25 @@ async function registrarBitacora(req, res, next) {
         const idAsignacion = Number(id_asignacion);
         const numVisita = Number(visita);
         const numHoras = Number(horas);
+
+        // Validación de horas: máximo 8 horas por jornada pedagógica
+        if (isNaN(numHoras) || numHoras <= 0 || numHoras > 8) {
+            throw createError(400, 'Las horas de práctica en una sola jornada deben estar entre 1 y 8 horas');
+        }
+
+        // Validación de fecha: no permitir fechas futuras
+        if (fecha && String(fecha).trim()) {
+            const fechaStr = String(fecha).trim().substring(0, 10);
+            const fechaSesion = new Date(fechaStr + 'T00:00:00');
+            if (isNaN(fechaSesion.getTime())) {
+                throw createError(400, 'Formato de fecha inválido. Utilice el formato YYYY-MM-DD');
+            }
+            const hoy = new Date();
+            hoy.setHours(23, 59, 59, 999);
+            if (fechaSesion > hoy) {
+                throw createError(400, 'La fecha de la sesión no puede ser una fecha futura');
+            }
+        }
 
         // Construir contenido estructurado de actividades pedagógicas si vienen desglosadas
         let textoActividades = actividades || '';
@@ -558,19 +609,30 @@ async function registrarBitacora(req, res, next) {
             }
         }
 
-        const insertSql = `
-            INSERT INTO BITACORA (ID_BITACORA, ID_ASIGNACION, NUMERO_VISITA, FECHA_REGISTRO, HORAS_SESION, ACTIVIDADES, OBSERVACIONES, URL_EVIDENCIA, ESTADO_REVISION)
-            VALUES ((SELECT NVL(MAX(ID_BITACORA), 0) + 1 FROM BITACORA), :idAsignacion, :numVisita, SYSDATE, :numHoras, :actividades, :observaciones, :evidencia, 'PENDIENTE')
-        `;
-
-        await executeQuery(insertSql, {
+        const bindParams = {
             idAsignacion,
             numVisita,
             numHoras,
             actividades: textoActividades,
             observaciones: textoObservaciones,
             evidencia: evidencia && String(evidencia).trim() ? String(evidencia).trim() : `evidencia_visita_${numVisita}.pdf`,
-        });
+        };
+
+        let insertSql;
+        if (fecha && String(fecha).trim()) {
+            insertSql = `
+                INSERT INTO BITACORA (ID_BITACORA, ID_ASIGNACION, NUMERO_VISITA, FECHA_REGISTRO, HORAS_SESION, ACTIVIDADES, OBSERVACIONES, URL_EVIDENCIA, ESTADO_REVISION)
+                VALUES ((SELECT NVL(MAX(ID_BITACORA), 0) + 1 FROM BITACORA), :idAsignacion, :numVisita, TO_DATE(:fechaStr, 'YYYY-MM-DD'), :numHoras, :actividades, :observaciones, :evidencia, 'PENDIENTE')
+            `;
+            bindParams.fechaStr = String(fecha).trim().substring(0, 10);
+        } else {
+            insertSql = `
+                INSERT INTO BITACORA (ID_BITACORA, ID_ASIGNACION, NUMERO_VISITA, FECHA_REGISTRO, HORAS_SESION, ACTIVIDADES, OBSERVACIONES, URL_EVIDENCIA, ESTADO_REVISION)
+                VALUES ((SELECT NVL(MAX(ID_BITACORA), 0) + 1 FROM BITACORA), :idAsignacion, :numVisita, SYSDATE, :numHoras, :actividades, :observaciones, :evidencia, 'PENDIENTE')
+            `;
+        }
+
+        await executeQuery(insertSql, bindParams);
 
         res.json({
             success: true,

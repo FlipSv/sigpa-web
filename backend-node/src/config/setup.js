@@ -24,6 +24,7 @@ async function runSetup() {
             `ALTER TABLE USUARIO MODIFY (CONTRASENA VARCHAR2(255))`,
             `ALTER TABLE PRACTICA ADD (DESCRIPCION VARCHAR2(500))`,
             `ALTER TABLE INSTITUCION ADD (FECHA_VENC_CONVENIO DATE)`,
+            `ALTER TABLE ASIGNACION MODIFY (ID_USUARIO NULL)`,
             `ALTER TABLE ASIGNACION ADD (ID_ESTUDIANTE NUMBER(10))`,
             `ALTER TABLE ASIGNACION ADD (ID_TUTOR NUMBER(10))`,
             `ALTER TABLE ASIGNACION ADD (ESTADO_PRACTICA VARCHAR2(20) DEFAULT 'EN_CURSO')`,
@@ -37,20 +38,23 @@ async function runSetup() {
         for (const sql of alterStatements) {
             try {
                 await executeQuery(sql);
-                console.log(`  ✔ Columna agregada: ${sql}`);
+                console.log(`  ✔ Modificación/Columna aplicada: ${sql}`);
             } catch (err) {
-                // ORA-01430: column being added already exists in table
-                if (err.message.includes('ORA-01430')) {
-                    // Columna ya existe
+                // ORA-01430: column already exists
+                // ORA-01451: column to be modified to NULL is already NULL
+                // ORA-01442: column to be modified to NOT NULL is already NOT NULL
+                if (err.message.includes('ORA-01430') || err.message.includes('ORA-01451') || err.message.includes('ORA-01442')) {
+                    // Columna o restricción ya en el estado deseado
                 } else {
                     console.warn(`  ℹ️  Aviso: ${err.message}`);
                 }
             }
         }
 
-        // Sincronizar ID_ESTUDIANTE con ID_USUARIO si existe
+        // Sincronizar bidireccionalmente ID_ESTUDIANTE e ID_USUARIO
         try {
             await executeQuery(`UPDATE ASIGNACION SET ID_ESTUDIANTE = ID_USUARIO WHERE ID_ESTUDIANTE IS NULL`);
+            await executeQuery(`UPDATE ASIGNACION SET ID_USUARIO = ID_ESTUDIANTE WHERE ID_USUARIO IS NULL`);
         } catch (e) {}
 
         // Listar tablas y columnas

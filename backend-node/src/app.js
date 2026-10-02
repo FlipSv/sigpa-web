@@ -83,7 +83,6 @@ const frontendCandidates = [
     process.env.FRONTEND_PATH ? path.resolve(__dirname, process.env.FRONTEND_PATH) : null,
     path.resolve(__dirname, '../../frontend'),
     path.resolve(__dirname, '../frontend'),
-    'd:/Descargas/PROYECTO_INTEGRADOR/sigpa_app/frontend',
 ].filter(Boolean);
 
 let frontendDir = null;
