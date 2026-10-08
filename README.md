@@ -137,9 +137,15 @@ Create your local environment file from the template:
 cp .env.example .env
 ```
 
-Configure your Oracle connection credentials and JWT secret in `.env`:
+Configure `.env`. If you **do not have Oracle installed**, simply keep `USE_MOCK_DB=true` to use the built-in SQLite database (`sigpa.db`) with mock data:
 ```env
 PORT=8081
+
+# Mock Mode (Zero Oracle Dependencies - Ideal for local frontend development)
+USE_MOCK_DB=true
+SQLITE_DB_PATH=sigpa.db
+
+# Required only if USE_MOCK_DB=false (Oracle 10g Production Mode)
 DB_USER=your_oracle_user
 DB_PASSWORD=your_oracle_password
 DB_CONNECT_STRING=localhost:1521/XE

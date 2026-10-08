@@ -7,17 +7,44 @@ Implementa una arquitectura limpia con **Connection Pooling (`oracledb`)** y pol
 
 ## 🚀 Requisitos e Instalación
 
+### ⚡ Modo Mock / SQLite para Desarrollo Autónomo (Sin Oracle)
+Si tú o un miembro del equipo no tiene **Oracle Database** ni **Oracle Instant Client** instalado en su laptop, el backend cuenta con un switch en `.env` para usar **SQLite (`sigpa.db`)** con datos de prueba pre-cargados:
+
+En tu archivo `.env`:
+```env
+USE_MOCK_DB=true
+SQLITE_DB_PATH=sigpa.db
+```
+
+#### Ventajas del Modo Mock:
+- **Cero bloqueos:** Permite programar y probar el diseño del frontend inmediatamente sin depender de Oracle.
+- **Autónomo y persistente:** Los datos se guardan en el archivo local `sigpa.db`.
+- **Usuarios de prueba preconfigurados (contraseña: `1234`):**
+  - **Director:** `director@sigpa.edu`
+  - **Estudiante:** `estudiante@sigpa.edu`
+  - **Tutor:** `tutor@sigpa.edu`
+  - **Asesor:** `asesor@sigpa.edu`
+  - **Coordinador:** `coord@sigpa.edu`
+- **Alternar a Oracle:** Cuando desees usar Oracle 10g, simplemente cambia `USE_MOCK_DB=false`.
+
+---
+
 ### 1. Variables de Entorno (`.env`)
-Configura tus credenciales de Oracle 10g en el archivo `.env`:
+Configura tus credenciales en el archivo `.env`:
 
 ```env
 PORT=8081
+USE_MOCK_DB=true
+SQLITE_DB_PATH=sigpa.db
+
+# Requerido solo si USE_MOCK_DB=false (Modo Oracle)
 DB_USER=SCOTT
 DB_PASSWORD=tu_contraseña_aqui
 DB_CONNECT_STRING=localhost:1521/XE
+ORACLE_CLIENT_PATH=C:\oraclexe\instantclient_19_23\instantclient_23_26
 ```
 
-> **Política Fail-Fast:** Si el servicio de Oracle 10g no está activo o las credenciales no son válidas al arrancar, el servidor emitirá un error detallado y se detendrá inmediatamente (`process.exit(1)`).
+> **Política Fail-Fast (Modo Oracle):** Si `USE_MOCK_DB=false` y el servicio de Oracle 10g no está activo o las credenciales no son válidas al arrancar, el servidor emitirá un error descriptivo con la sugerencia de activar `USE_MOCK_DB=true` y se detendrá inmediatamente (`process.exit(1)`).
 
 ### 2. Inicializar / Verificar Tablas DDL en Oracle
 Crea las tablas en tu esquema de Oracle 10g si aún no están creadas:
