@@ -101,6 +101,69 @@ async function runUnitTests() {
         assert(!errCalled, 'Coordinador debe mapear al rol Tutor');
     });
 
+    // --- Middleware errorHandler Sanitization Tests ---
+    const { errorHandler, createError } = require('./src/middlewares/errorHandler');
+    await test('errorHandler: Sanitiza errores de unicidad ORA-00001 a mensaje amigable', async () => {
+        let sentStatus = null;
+        let sentBody = null;
+        const mockRes = {
+            status: (s) => { sentStatus = s; return mockRes; },
+            json: (b) => { sentBody = b; return mockRes; }
+        };
+        const oraErr = new Error('ORA-00001: unique constraint (SCOTT.SYS_C005432) violated');
+        errorHandler(oraErr, { method: 'POST', path: '/api/director/nuevo_usuario' }, mockRes, () => {});
+        assert(sentStatus === 500, 'Debe retornar status 500');
+        assert(sentBody && sentBody.success === false, 'Debe indicar success: false');
+        assert(sentBody.message.includes('Ya existe un registro con la misma información única'), 'Debe ocultar ORA-00001 y retornar mensaje amigable');
+        assert(!sentBody.message.includes('SCOTT.SYS_C005432'), 'No debe revelar el nombre interno de la restricción');
+    });
+
+    await test('errorHandler: Preserva mensaje de createError amigable para el cliente', async () => {
+        let sentStatus = null;
+        let sentBody = null;
+        const mockRes = {
+            status: (s) => { sentStatus = s; return mockRes; },
+            json: (b) => { sentBody = b; return mockRes; }
+        };
+        const customErr = createError(400, 'La nueva contraseña debe tener al menos 6 caracteres');
+        errorHandler(customErr, { method: 'POST', path: '/api/perfil/cambiar-contrasena' }, mockRes, () => {});
+        assert(sentStatus === 400, 'Debe retornar status 400');
+        assert(sentBody.message === 'La nueva contraseña debe tener al menos 6 caracteres', 'Debe preservar mensaje personalizado');
+    });
+
+    // --- Middlewares Rate Limiter Tests ---
+    const { loginRateLimiter, apiRateLimiter } = require('./src/middlewares/rateLimiter');
+    await test('RateLimiters: Middlewares configurados correctamente para login y api', async () => {
+        assert(typeof loginRateLimiter === 'function', 'loginRateLimiter debe ser una función middleware');
+        assert(typeof apiRateLimiter === 'function', 'apiRateLimiter debe ser una función middleware');
+    });
+
+    // --- Controller auth.cambiarContrasena Tests ---
+    const { cambiarContrasena } = require('./src/controllers/auth.controller');
+    await test('cambiarContrasena: Rechaza si no hay usuario autenticado (401)', async () => {
+        let errCalled = null;
+        await cambiarContrasena({ headers: {}, body: {} }, {}, (err) => { errCalled = err; });
+        assert(errCalled && errCalled.statusCode === 401, 'Debe requerir autenticación');
+    });
+
+    await test('cambiarContrasena: Rechaza si falta contraseña actual o nueva (400)', async () => {
+        let errCalled = null;
+        await cambiarContrasena({ usuario: { id: 1 }, body: { contrasena_actual: '123' } }, {}, (err) => { errCalled = err; });
+        assert(errCalled && errCalled.statusCode === 400, 'Debe requerir ambos campos');
+    });
+
+    await test('cambiarContrasena: Rechaza si la nueva contraseña es muy corta (<6 chars) (400)', async () => {
+        let errCalled = null;
+        await cambiarContrasena({ usuario: { id: 1 }, body: { contrasena_actual: 'actual123', nueva_contrasena: 'abc' } }, {}, (err) => { errCalled = err; });
+        assert(errCalled && errCalled.statusCode === 400, 'Debe exigir al menos 6 caracteres');
+    });
+
+    await test('cambiarContrasena: Rechaza si la nueva contraseña es idéntica a la actual (400)', async () => {
+        let errCalled = null;
+        await cambiarContrasena({ usuario: { id: 1 }, body: { contrasena_actual: 'clave123', nueva_contrasena: 'clave123' } }, {}, (err) => { errCalled = err; });
+        assert(errCalled && errCalled.statusCode === 400, 'Debe exigir que sea diferente a la actual');
+    });
+
     console.log(`\n====================================================`);
     console.log(`  Resultado Unitario: ${passed} pasadas, ${failed} fallidas.`);
     console.log(`====================================================`);

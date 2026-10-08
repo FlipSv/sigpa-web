@@ -167,9 +167,8 @@ async function initPool() {
         console.error('    1. El servicio de Oracle 10g (Listener/Database) esté iniciado.');
         console.error('    2. El puerto, host y SID (ej. localhost:1522/orcl o localhost:1521/XE) sean correctos.');
         console.error('    3. El usuario y contraseña en .env sean válidos.');
-        console.error('    4. La ruta en ORACLE_CLIENT_PATH apunte a la carpeta del Instant Client de 64 bits.');
-        console.error('\nEl servidor se detendrá debido a la política Fail-Fast.\n');
-        process.exit(1);
+        console.error('    4. La ruta en ORACLE_CLIENT_PATH apunte a la carpeta del Instant Client de 64 bits.\n');
+        throw err;
     }
 }
 
