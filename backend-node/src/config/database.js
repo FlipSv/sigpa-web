@@ -10,7 +10,7 @@
 'use strict';
 
 const path = require('path');
-const fs   = require('fs');
+const fs = require('fs');
 
 const isMockMode = process.env.USE_MOCK_DB === 'true' || process.env.USE_MOCK_DB === '1';
 
@@ -27,7 +27,7 @@ if (!isMockMode) {
         oracledb = require('oracledb');
         oracledb.outFormat = oracledb.OUT_FORMAT_OBJECT;
         oracledb.autoCommit = true;
-        oracledb.fetchAsString = [ oracledb.CLOB ];
+        oracledb.fetchAsString = [oracledb.CLOB];
     } catch (err) {
         console.warn(`[ORACLE] No se pudo cargar el módulo oracledb: ${err.message}`);
     }
@@ -137,7 +137,7 @@ const dbConfig = {
     user: process.env.DB_USER || 'SCOTT',
     password: process.env.DB_PASSWORD || 'tiger',
     connectString: process.env.DB_CONNECT_STRING ||
-                   `${process.env.ORACLE_HOST || 'localhost'}:${process.env.ORACLE_PORT || '1522'}/${process.env.ORACLE_SID || 'orcl'}`,
+        `${process.env.ORACLE_HOST || 'localhost'}:${process.env.ORACLE_PORT || '1522'}/${process.env.ORACLE_SID || 'orcl'}`,
     poolMin: 2,
     poolMax: 10,
     poolIncrement: 2,

@@ -8,23 +8,48 @@
 'use strict';
 
 require('dotenv').config();
-const path    = require('path');
-const fs      = require('fs');
+const path = require('path');
+const fs = require('fs');
 const express = require('express');
-const cors    = require('cors');
-const morgan  = require('morgan');
+const cors = require('cors');
+const morgan = require('morgan');
+const helmet = require('helmet');
 
 const { initPool, closePool, executeQuery, isMockMode } = require('./config/database');
 const { errorHandler } = require('./middlewares/errorHandler');
+const { apiRateLimiter } = require('./middlewares/rateLimiter');
 
-const authRoutes       = require('./routes/auth.routes');
-const directorRoutes   = require('./routes/director.routes');
+const authRoutes = require('./routes/auth.routes');
+const directorRoutes = require('./routes/director.routes');
 const estudianteRoutes = require('./routes/estudiante.routes');
-const tutorRoutes      = require('./routes/tutor.routes');
-const asesorRoutes     = require('./routes/asesor.routes');
+const tutorRoutes = require('./routes/tutor.routes');
+const asesorRoutes = require('./routes/asesor.routes');
 
-const app  = express();
+const app = express();
 const PORT = process.env.PORT || 8081;
+
+// ── Cabeceras de Seguridad (Helmet) ────────────────────────────────────
+app.use(
+    helmet({
+        contentSecurityPolicy: {
+            directives: {
+                defaultSrc: ["'self'"],
+                scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net"],
+                scriptSrcAttr: ["'unsafe-inline'"], // <-- AGREGAR ESTA LÍNEA
+                styleSrc: [
+                    "'self'",
+                    "'unsafe-inline'",
+                    "https://fonts.googleapis.com",
+                    "https://cdn.jsdelivr.net",
+                ],
+                fontSrc: ["'self'", "https://fonts.gstatic.com"],
+                imgSrc: ["'self'", "data:", "https:"],
+                connectSrc: ["'self'"],
+            },
+        },
+        crossOriginEmbedderPolicy: false,
+    })
+);
 
 // ── Middlewares Generales ──────────────────────────────────────────────
 app.use(cors({
@@ -40,7 +65,10 @@ if (process.env.NODE_ENV !== 'production') {
     app.use(morgan('dev'));
 }
 
-// ── Health Check / Test DB (Oracle 10g ó SQLite Mock) ──────────────────
+// ── Rate Limiting General para la API ──────────────────────────────────
+app.use('/api', apiRateLimiter);
+
+// ── Health Check / Test DB (Oracle 10g) ────────────────────────────────
 app.get('/api/test-db', async (req, res) => {
     try {
         const verRes = await executeQuery('SELECT BANNER FROM v$version WHERE ROWNUM = 1');
@@ -74,12 +102,12 @@ app.get('/api/test-db', async (req, res) => {
 });
 
 // ── Rutas de la API REST ───────────────────────────────────────────────
-app.use('/api',            authRoutes);
-app.use('/api/director',    directorRoutes);
-app.use('/api/estudiante',  estudianteRoutes);
-app.use('/api/tutor',       tutorRoutes);
+app.use('/api', authRoutes);
+app.use('/api/director', directorRoutes);
+app.use('/api/estudiante', estudianteRoutes);
+app.use('/api/tutor', tutorRoutes);
 app.use('/api/coordinador', tutorRoutes); // Compatibilidad con rutas heredadas
-app.use('/api/asesor',      asesorRoutes);
+app.use('/api/asesor', asesorRoutes);
 
 // ── Servidor de Archivos Estáticos (Frontend) ──────────────────────────
 const frontendCandidates = [
@@ -120,10 +148,15 @@ app.use(errorHandler);
 // ── Iniciar Servidor con Fail-Fast para Oracle ──────────────────────────
 async function startServer() {
     try {
-        // Inicialización obligatoria de Oracle (si falla, database.js hace process.exit(1))
-        await initPool();
+        // Inicialización de Oracle (no bloquea el arranque del servidor web)
+        try {
+            await initPool();
+        } catch (dbErr) {
+            console.warn('[ORACLE] Base de datos no disponible de inmediato. El servidor web iniciará normalmente.');
+        }
 
         app.listen(PORT, () => {
+            console.log('====================================================');
             console.log(`[API] Endpoints RESTful en: http://localhost:${PORT}/api`);
             console.log(`[VISTA] Aplicación disponible en: http://localhost:${PORT}`);
             console.log(`[DB] Motor activo: ${isMockMode ? 'SQLite 3 (Modo Mock / sigpa.db)' : 'Oracle Database 10g (Modo Thick)'}`);
@@ -137,11 +170,14 @@ async function startServer() {
 }
 
 // Cierre ordenado de conexiones
-process.on('SIGINT', async () => {
-    console.log('\n[SERVER] Deteniendo servidor...');
+async function gracefulShutdown(signal) {
+    console.log(`\n[SERVER] Señal ${signal} recibida. Deteniendo servidor y liberando recursos...`);
     await closePool();
     process.exit(0);
-});
+}
+
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 
 if (process.env.NODE_ENV !== 'test') {
     startServer();

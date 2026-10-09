@@ -1,0 +1,20 @@
+# ── Entorno del Servidor ───────────────────────────
+PORT=8081
+NODE_ENV=development
+ORACLE_CLIENT_PATH=C:\oraclexe\instantclient_19_23\instantclient_23_26
+
+# ── Configuración de Base de Datos (Oracle 10g Exclusivo) ─────────
+DB_USER=SCOTT
+DB_PASSWORD=ANDRESF485
+DB_CONNECT_STRING=localhost:1522/orcl
+
+# ── Frontend estáticos ─────────────────────────────
+FRONTEND_PATH=../frontend
+
+# ── CORS ───────────────────────────────────────────
+CORS_ORIGIN=*
+
+# ── Seguridad y Autenticación JWT ───────────────────
+JWT_SECRET=sigpa_udi_secret_key_2026_super_segura
+JWT_EXPIRES_IN=8h
+
