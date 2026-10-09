@@ -15,7 +15,7 @@ const cors = require('cors');
 const morgan = require('morgan');
 const helmet = require('helmet');
 
-const { initPool, closePool, executeQuery } = require('./config/database');
+const { initPool, closePool, executeQuery, isMockMode } = require('./config/database');
 const { errorHandler } = require('./middlewares/errorHandler');
 const { apiRateLimiter } = require('./middlewares/rateLimiter');
 
@@ -83,17 +83,20 @@ app.get('/api/test-db', async (req, res) => {
 
         res.json({
             success: true,
-            message: 'Conexión a Oracle 10g activa y verificada',
-            motor: 'Oracle Database 10g',
+            message: isMockMode
+                ? 'Conexión a SQLite activa (Modo Mock de Desarrollo sin Oracle)'
+                : 'Conexión a Oracle 10g activa y verificada',
+            motor: isMockMode ? 'SQLite 3 (Modo Mock)' : 'Oracle Database 10g',
             version: verRes.rows[0].BANNER,
             tables: tblRes.rows.map(t => t.TABLE_NAME),
             totalUsuarios: userCount,
+            modoMock: Boolean(isMockMode),
             timestamp: new Date().toISOString(),
         });
     } catch (err) {
         res.status(500).json({
             success: false,
-            message: 'Error al consultar Oracle 10g: ' + err.message,
+            message: 'Error al consultar base de datos: ' + err.message,
         });
     }
 });
@@ -156,7 +159,8 @@ async function startServer() {
             console.log('====================================================');
             console.log(`[API] Endpoints RESTful en: http://localhost:${PORT}/api`);
             console.log(`[VISTA] Aplicación disponible en: http://localhost:${PORT}`);
-            console.log(`[TEST] Diagnóstico Oracle en: http://localhost:${PORT}/api/test-db`);
+            console.log(`[DB] Motor activo: ${isMockMode ? 'SQLite 3 (Modo Mock / sigpa.db)' : 'Oracle Database 10g (Modo Thick)'}`);
+            console.log(`[TEST] Diagnóstico DB en: http://localhost:${PORT}/api/test-db`);
             console.log('====================================================');
         });
     } catch (err) {

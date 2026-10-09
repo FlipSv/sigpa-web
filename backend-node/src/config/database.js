@@ -1,20 +1,37 @@
 /**
  * SIGPA — Capa de Persistencia y Conexión a Base de Datos
- * Conexión Exclusiva a Oracle Database en Modo Thick (Oracle 10g / 11g / 19c / 23c)
+ * Soporte Dual:
+ *  1. Oracle Database (Modo Thick / Fail-Fast para entornos con Oracle)
+ *  2. SQLite Database (Modo Mock para desarrollo sin Oracle: USE_MOCK_DB=true)
  *
- * Modo: Fail-Fast (si Oracle no está disponible, el sistema se detiene con error descriptivo)
+ * Universidad de Investigación y Desarrollo (UDI)
  */
 
 'use strict';
 
 const path = require('path');
-const fs   = require('fs');
-const oracledb = require('oracledb');
+const fs = require('fs');
 
-// Configuración global de oracledb
-oracledb.outFormat = oracledb.OUT_FORMAT_OBJECT;
-oracledb.autoCommit = true;
-oracledb.fetchAsString = [ oracledb.CLOB ];
+const isMockMode = process.env.USE_MOCK_DB === 'true' || process.env.USE_MOCK_DB === '1';
+
+// Cargar SQLite si estamos en modo Mock
+let sqliteModule = null;
+if (isMockMode) {
+    sqliteModule = require('./sqlite');
+}
+
+// Cargar oracledb solo si no estamos en modo Mock
+let oracledb = null;
+if (!isMockMode) {
+    try {
+        oracledb = require('oracledb');
+        oracledb.outFormat = oracledb.OUT_FORMAT_OBJECT;
+        oracledb.autoCommit = true;
+        oracledb.fetchAsString = [oracledb.CLOB];
+    } catch (err) {
+        console.warn(`[ORACLE] No se pudo cargar el módulo oracledb: ${err.message}`);
+    }
+}
 
 /**
  * Convierte un valor de tipo CLOB, Stream u Objeto a un string de texto limpio
@@ -23,7 +40,7 @@ async function cleanLOB(val) {
     if (val === null || val === undefined) return '';
     if (typeof val === 'string') return val;
     if (typeof val === 'number' || typeof val === 'boolean') return String(val);
-    
+
     // Si es un objeto LOB de Oracle con método getData()
     if (typeof val === 'object' && typeof val.getData === 'function') {
         try {
@@ -57,7 +74,6 @@ async function cleanLOB(val) {
     }
 }
 
-
 // ── Inicialización de Modo Thick (Oracle Instant Client / Oracle Home) ───
 let isThickInitialized = false;
 
@@ -89,7 +105,8 @@ function resolveInstantClientDir(basePath) {
 }
 
 function initThickClient() {
-    if (isThickInitialized) return;
+    if (isMockMode) return;
+    if (isThickInitialized || !oracledb) return;
 
     let rawClientPath = process.env.ORACLE_CLIENT_PATH ? process.env.ORACLE_CLIENT_PATH.trim() : null;
     let clientPath = resolveInstantClientDir(rawClientPath);
@@ -106,11 +123,13 @@ function initThickClient() {
     console.log('[ORACLE] ✔ Modo Thick activado correctamente.');
 }
 
-// Inicializar cliente al cargar módulo
-try {
-    initThickClient();
-} catch (err) {
-    console.warn(`[ORACLE] Aviso al inicializar cliente Thick: ${err.message}`);
+// Inicializar cliente al cargar módulo si aplica Oracle
+if (!isMockMode) {
+    try {
+        initThickClient();
+    } catch (err) {
+        console.warn(`[ORACLE] Aviso al inicializar cliente Thick: ${err.message}`);
+    }
 }
 
 // Credenciales desde variables de entorno (.env)
@@ -118,7 +137,7 @@ const dbConfig = {
     user: process.env.DB_USER || 'SCOTT',
     password: process.env.DB_PASSWORD || 'tiger',
     connectString: process.env.DB_CONNECT_STRING ||
-                   `${process.env.ORACLE_HOST || 'localhost'}:${process.env.ORACLE_PORT || '1522'}/${process.env.ORACLE_SID || 'orcl'}`,
+        `${process.env.ORACLE_HOST || 'localhost'}:${process.env.ORACLE_PORT || '1522'}/${process.env.ORACLE_SID || 'orcl'}`,
     poolMin: 2,
     poolMax: 10,
     poolIncrement: 2,
@@ -128,16 +147,21 @@ const dbConfig = {
 let pool = null;
 
 /**
- * Inicializa el pool de conexiones a Oracle.
- * Si falla la conexión, realiza un Fail-Fast (process.exit(1)).
+ * Inicializa la capa de base de datos:
+ *  - En modo USE_MOCK_DB=true: inicializa SQLite (sigpa.db).
+ *  - En modo Oracle: inicializa el pool de conexiones con política Fail-Fast.
  */
 async function initPool() {
+    if (isMockMode) {
+        return await sqliteModule.initSqlite();
+    }
+
     if (pool) return pool;
 
     try {
         initThickClient();
     } catch (e) {
-        // Ya inicializado o error manejado
+        // Ya inicializado o manejado
     }
 
     console.log('====================================================');
@@ -167,15 +191,24 @@ async function initPool() {
         console.error('    1. El servicio de Oracle 10g (Listener/Database) esté iniciado.');
         console.error('    2. El puerto, host y SID (ej. localhost:1522/orcl o localhost:1521/XE) sean correctos.');
         console.error('    3. El usuario y contraseña en .env sean válidos.');
-        console.error('    4. La ruta en ORACLE_CLIENT_PATH apunte a la carpeta del Instant Client de 64 bits.\n');
-        throw err;
+        console.error('    4. La ruta en ORACLE_CLIENT_PATH apunte a la carpeta del Instant Client de 64 bits.');
+        console.error('\n💡 SOLUCIÓN RÁPIDA (MODO MOCK SIN ORACLE):');
+        console.error('  Si no tienes Oracle instalado en tu equipo, agrega en tu archivo .env:');
+        console.error('    USE_MOCK_DB=true');
+        console.error('  Esto activará automáticamente SQLite local (sigpa.db) con todos los datos');
+        console.error('  de prueba para programar la interfaz sin bloqueos.\n');
+        process.exit(1);
     }
 }
 
 /**
- * Cierra el pool de conexiones de forma segura.
+ * Cierra las conexiones de forma segura.
  */
 async function closePool() {
+    if (isMockMode) {
+        return await sqliteModule.closeSqlite();
+    }
+
     if (pool) {
         try {
             await pool.close(10);
@@ -188,15 +221,15 @@ async function closePool() {
 }
 
 /**
- * Ejecuta una consulta SQL contra el pool de Oracle.
- * Garantiza que la conexión se libere de vuelta al pool en el bloque finally.
- *
- * @param {string} sql - Sentencia SQL a ejecutar.
- * @param {Object|Array} binds - Parámetros de la consulta (ej. { id: 1, email: '...' }).
- * @param {Object} options - Opciones de oracledb.execute (ej. { autoCommit: true }).
- * @returns {Promise<Object>} Resultado de oracledb.execute ({ rows, rowsAffected, etc. }).
+ * Ejecuta una consulta SQL.
+ * En modo USE_MOCK_DB=true delega a SQLite con traducción de dialecto.
+ * En modo Oracle ejecuta contra el pool.
  */
 async function executeQuery(sql, binds = {}, options = {}) {
+    if (isMockMode) {
+        return await sqliteModule.executeSqliteQuery(sql, binds, options);
+    }
+
     if (!pool) {
         await initPool();
     }
@@ -246,12 +279,13 @@ async function executeQuery(sql, binds = {}, options = {}) {
 }
 
 /**
- * Ejecuta múltiples operaciones dentro de una transacción atómica protegida en Oracle.
- *
- * @param {Function} callback - Función asíncrona que recibe la conexión activa `async (conn) => { ... }`.
- * @returns {Promise<any>}
+ * Ejecuta múltiples operaciones dentro de una transacción atómica protegida.
  */
 async function executeTransaction(callback) {
+    if (isMockMode) {
+        return await sqliteModule.executeSqliteTransaction(callback);
+    }
+
     if (!pool) {
         await initPool();
     }
@@ -290,5 +324,5 @@ module.exports = {
     executeQuery,
     executeTransaction,
     dbConfig,
+    isMockMode,
 };
-

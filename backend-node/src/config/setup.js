@@ -5,14 +5,26 @@
 'use strict';
 
 require('dotenv').config();
-const { initPool, closePool, executeQuery } = require('./database');
+const { initPool, closePool, executeQuery, isMockMode } = require('./database');
 
 async function runSetup() {
     console.log('====================================================');
-    console.log('  SIGPA — Inicialización DDL Base de Datos (Oracle 10g)');
+    console.log(`  SIGPA — Inicialización DDL Base de Datos (${isMockMode ? 'SQLite Mock' : 'Oracle 10g'})`);
     console.log('====================================================');
 
     try {
+        if (isMockMode) {
+            console.log('[MOCK-DB] Modo Mock activo: Inicializando y verificando SQLite (sigpa.db)...');
+            await initPool();
+            const tablesRes = await executeQuery('SELECT TABLE_NAME FROM USER_TABLES ORDER BY TABLE_NAME');
+            console.log('\nTablas disponibles en SQLite (sigpa.db):');
+            tablesRes.rows.forEach(t => console.log(`  • ${t.TABLE_NAME}`));
+            const userCount = await executeQuery('SELECT COUNT(*) AS CNT FROM USUARIO');
+            console.log(`\n✔ Base de datos SQLite inicializada exitosamente con ${userCount.rows[0].CNT} usuarios sembrados.`);
+            await closePool();
+            process.exit(0);
+        }
+
         await initPool();
 
         // Obtener versión de Oracle
