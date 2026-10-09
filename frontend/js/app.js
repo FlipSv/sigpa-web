@@ -566,14 +566,14 @@ async function loadDirectorView(tab, btn) {
                 fetch(`${API_BASE}/director/kpis`).then(r => r.json()),
                 fetch(`${API_BASE}/director/estado`).then(r => r.json()),
             ]);
-            const kpi      = kpiRes.data;
-            const practicas = pracRes.data || [];
+            const kpi      = (kpiRes && (kpiRes.data || kpiRes)) || {};
+            const practicas = (pracRes && pracRes.data) || [];
 
             /* ── KPI Calculation ── */
-            const totalEst   = kpi.totalEstudiantes   || 0;
-            const totalHrs   = kpi.totalHoras         || 0;
-            const convenios  = kpi.conveniosActivos   || 0;
-            const cupos      = kpi.cuposDisponibles   || 0;
+            const totalEst   = kpi.totalEstudiantes || kpi.estudiantes || 0;
+            const totalHrs   = kpi.totalHoras || kpi.horas || 0;
+            const convenios  = kpi.conveniosActivos || kpi.convenios || 0;
+            const cupos      = kpi.cuposDisponibles || kpi.cupos || 0;
 
             /* ── Agrupaciones para gráficos ── */
             const abiertas  = practicas.filter(p => p.estado === 'ABIERTA').length;
@@ -582,7 +582,7 @@ async function loadDirectorView(tab, btn) {
 
             /* ── Estado de practicantes para donut ── */
             const asigRes   = await fetch(`${API_BASE}/director/asignaciones`).then(r => r.json());
-            const asigs     = asigRes.data || [];
+            const asigs     = (asigRes && asigRes.data) || [];
             const enEjec    = asigs.filter(a => a.estado === 'APROBADA').length;
             const enPend    = asigs.filter(a => a.estado !== 'APROBADA').length;
             const totalAsig = asigs.length || 1;
