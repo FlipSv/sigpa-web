@@ -12,6 +12,7 @@
 
 const { executeQuery, executeTransaction } = require('../config/database');
 const { createError } = require('../middlewares/errorHandler');
+const { cerrarPractica } = require('./director.controller');
 
 /* ── GET /api/tutor/asignaciones ─────────────────────────────────────── */
 async function getAsignaciones(req, res, next) {
@@ -181,4 +182,6 @@ module.exports = {
     getBitacoras,
     calificarBitacora,
     aprobarAsignacion,
+    cerrarAsignacion: cerrarPractica,
+    cerrarPractica,
 };

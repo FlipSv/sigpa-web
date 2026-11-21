@@ -650,6 +650,43 @@
             }
         }
 
+        /* ── Mobile Hamburger Navigation ────────────────────────── */
+        .mobile-nav-toggle {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: #ffffff;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            padding: 8px;
+            cursor: pointer;
+            color: #1e293b;
+            transition: all 0.2s ease;
+        }
+
+        .mobile-nav-toggle:hover {
+            background: #f1f5f9;
+            border-color: #3b82f6;
+        }
+
+        @media (max-width: 640px) {
+            .mobile-nav-toggle {
+                display: inline-flex;
+            }
+            .form-top-bar {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                width: 100%;
+            }
+            .brand-side {
+                padding: 24px 16px;
+            }
+            .form-side {
+                padding: 24px 16px;
+            }
+        }
+
         @media (max-width: 860px) {
             .split-container {
                 flex-direction: column;
@@ -889,8 +926,15 @@
          COLUMNA DERECHA: FORMULARIO DE ACCESO
          ══════════════════════════════════════════════════════════ -->
         <main class="form-side">
-            <!-- Top Bar con Menú Demo -->
+            <!-- Top Bar con Menú Demo y Toggle Mobile -->
             <div class="form-top-bar">
+                <button type="button" class="mobile-nav-toggle" id="btnHamburgerIndex" aria-label="Abrir menú institucional" onclick="toggleDemoDropdown()">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="3" y1="12" x2="21" y2="12"></line>
+                        <line x1="3" y1="6" x2="21" y2="6"></line>
+                        <line x1="3" y1="18" x2="21" y2="18"></line>
+                    </svg>
+                </button>
                 <div class="demo-menu-wrapper">
                     <button type="button" class="demo-badge-btn" id="btnDemoMenu" onclick="toggleDemoDropdown()">
                         <span>💡</span> Cuentas de Prueba Demo <small style="opacity:.7">▾</small>

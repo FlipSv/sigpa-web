@@ -1,0 +1,15 @@
+{
+  "name": "sigpa-api-gateway",
+  "version": "1.0.0",
+  "description": "SIGPA - API Gateway y Enrutador Perimetral con JWT",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node tests/test.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2"
+  }
+}

@@ -109,6 +109,14 @@ app.use('/api/tutor', tutorRoutes);
 app.use('/api/coordinador', tutorRoutes); // Compatibilidad con rutas heredadas
 app.use('/api/asesor', asesorRoutes);
 
+// ── Servidor de Evidencias y Cargas Estáticas ─────────────────────────
+const uploadsDir = path.resolve(__dirname, '../uploads');
+const evidenciasDir = path.join(uploadsDir, 'evidencias');
+if (!fs.existsSync(evidenciasDir)) {
+    fs.mkdirSync(evidenciasDir, { recursive: true });
+}
+app.use('/uploads', express.static(uploadsDir));
+
 // ── Servidor de Archivos Estáticos (Frontend) ──────────────────────────
 const frontendCandidates = [
     process.env.FRONTEND_PATH ? path.resolve(__dirname, process.env.FRONTEND_PATH) : null,
@@ -130,7 +138,7 @@ if (frontendDir) {
 
     // Fallback para rutas directas
     app.get('*', (req, res, next) => {
-        if (req.path.startsWith('/api')) return next();
+        if (req.path.startsWith('/api') || req.path.startsWith('/uploads')) return next();
         const indexPath = path.join(frontendDir, 'index.html');
         if (fs.existsSync(indexPath)) {
             res.sendFile(indexPath);

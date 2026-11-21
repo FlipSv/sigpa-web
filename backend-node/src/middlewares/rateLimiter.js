@@ -15,6 +15,7 @@ const loginRateLimiter = rateLimit({
     max: 10, // Máximo 10 peticiones
     standardHeaders: true, // Retorna RateLimit-* en cabeceras
     legacyHeaders: false,
+    skip: () => process.env.NODE_ENV === 'test',
     message: {
         success: false,
         message: 'Demasiados intentos de inicio de sesión desde esta dirección IP. Por seguridad, intente nuevamente en 15 minutos.'
@@ -31,6 +32,7 @@ const apiRateLimiter = rateLimit({
     max: 300, // Máximo 300 peticiones
     standardHeaders: true,
     legacyHeaders: false,
+    skip: () => process.env.NODE_ENV === 'test',
     message: {
         success: false,
         message: 'Límite de solicitudes alcanzado. Por favor espere unos momentos antes de continuar.'

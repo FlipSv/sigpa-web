@@ -7,8 +7,12 @@
     "start": "node src/app.js",
     "dev": "nodemon src/app.js",
     "setup-db": "node src/config/setup.js",
-    "test": "node test_api.js",
-    "test:auth": "node test_auth_unit.js"
+    "test": "node tests/runner.js",
+    "test:e2e": "node tests/runner.js",
+    "test:m2": "node ../tests/test_m2_services.js",
+    "test:oracle": "node test_api.js --oracle",
+    "test:auth": "node test_auth_unit.js",
+    "test:legacy": "node test_api.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

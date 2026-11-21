@@ -1433,6 +1433,41 @@ table.data-table tbody tr:hover { background: #f8fafc; }
     .bottom-row        { grid-template-columns: 1fr; }
 }
 
+/* ── Mobile Hamburger & Navigation Drawer ────────────────────────── */
+.mobile-nav-toggle {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 7px;
+    color: var(--text-main);
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s;
+    margin-right: 12px;
+}
+.mobile-nav-toggle:hover {
+    background: var(--bg-hover, #f1f5f9);
+    border-color: var(--accent);
+}
+.sidebar-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(15, 23, 42, 0.45);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+    z-index: 999;
+}
+.sidebar-overlay.active,
+.sidebar-overlay.open {
+    display: block;
+}
+
 @media (max-width: 900px) {
     .sidebar           { width: 200px; }
     .kpi-row           { grid-template-columns: repeat(2,1fr); }
@@ -1442,9 +1477,43 @@ table.data-table tbody tr:hover { background: #f8fafc; }
 }
 
 @media (max-width: 640px) {
+    .mobile-nav-toggle {
+        display: inline-flex;
+    }
+    .topbar-left {
+        display: flex;
+        align-items: center;
+    }
+    .sidebar {
+        position: fixed !important;
+        top: 0;
+        left: -280px;
+        bottom: 0;
+        width: 260px;
+        height: 100vh;
+        z-index: 1000;
+        display: flex !important;
+        flex-direction: column;
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
+        transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .sidebar.open,
+    .sidebar.active {
+        left: 0 !important;
+    }
+    .topbar {
+        padding: 0 12px;
+        gap: 8px;
+    }
+    .topbar-period {
+        display: none;
+    }
+    .topbar-user-info {
+        display: none;
+    }
     .kpi-row           { grid-template-columns: 1fr; }
-    .sidebar           { display: none; }
     .kpi-value         { font-size: 24px; }
+    .content-area      { padding: 14px; }
 }
 
 /* =====================================================================

@@ -73,6 +73,9 @@
         </div>
     </aside>
 
+    <!-- Mobile Sidebar Backdrop Overlay -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
     <!-- ═══════════════════════════════════════════════
          MAIN WRAPPER
          ═══════════════════════════════════════════════ -->
@@ -81,6 +84,14 @@
         <!-- Top Bar -->
         <header class="topbar" id="topbar">
             <div class="topbar-left">
+                <!-- Hamburger menu toggle button for screens <= 640px -->
+                <button class="mobile-nav-toggle" id="btnHamburger" aria-label="Abrir menú de navegación">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="3" y1="12" x2="21" y2="12"></line>
+                        <line x1="3" y1="6" x2="21" y2="6"></line>
+                        <line x1="3" y1="18" x2="21" y2="18"></line>
+                    </svg>
+                </button>
                 <div class="topbar-title">
                     <h1 id="pageTitle">Panel de Control</h1>
                     <small id="pageSubtitle">SIGPA — UDI 2026-II</small>
@@ -183,6 +194,85 @@
                 <div class="chart-card" style="min-height:280px;"><div class="chart-card-body" style="align-items:center;justify-content:center;"><div class="skeleton" style="width:100%;height:200px;border-radius:8px;"></div></div></div>
             </div>
         </main>
+    </div>
+</div>
+
+<!-- Modal: Nueva Práctica (Director) -->
+<div id="modalNuevaPractica" class="modal-overlay" style="display:none;" onclick="closeModalNuevaPractica(event)">
+    <div class="modal-content" onclick="event.stopPropagation()" style="max-width: 540px;">
+        <div class="modal-header">
+            <h3 class="modal-title">➕ Nueva Práctica Pedagógica</h3>
+            <button type="button" class="btn-close" onclick="closeModalNuevaPractica()">×</button>
+        </div>
+        <form id="formNuevaPractica" onsubmit="handleGuardarPractica(event)">
+            <div class="modal-body">
+                <div style="margin-bottom:12px;">
+                    <label for="m-prac-nombre" style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;">Nombre de la Práctica *</label>
+                    <div class="input-wrapper">
+                        <input type="text" id="m-prac-nombre" required placeholder="ej. Práctica Pedagógica I - Observación Contextual">
+                    </div>
+                </div>
+
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+                    <div>
+                        <label for="m-prac-semestre" style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;">Semestre Curricular *</label>
+                        <div class="input-wrapper">
+                            <select id="m-prac-semestre" required style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:13.5px;background:var(--bg-card);color:var(--text-main);">
+                                <option value="1">P1 — Semestre 1</option>
+                                <option value="2">P2 — Semestre 2</option>
+                                <option value="3">P3 — Semestre 3</option>
+                                <option value="4">P4 — Semestre 4</option>
+                                <option value="5">P5 — Semestre 5</option>
+                                <option value="6">P6 — Semestre 6</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div>
+                        <label for="m-prac-tipo" style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;">Código / Modalidad *</label>
+                        <div class="input-wrapper">
+                            <select id="m-prac-tipo" required style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:13.5px;background:var(--bg-card);color:var(--text-main);">
+                                <option value="OBSERVACION">Observación</option>
+                                <option value="INVESTIGATIVA">Investigativa</option>
+                                <option value="INTERVENCION">Intervención</option>
+                                <option value="INTEGRAL">Integral / Formativa</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px;">
+                    <div>
+                        <label for="m-prac-creditos" style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;">Créditos *</label>
+                        <div class="input-wrapper">
+                            <input type="number" id="m-prac-creditos" min="1" max="10" value="3" required placeholder="3">
+                        </div>
+                    </div>
+                    <div>
+                        <label for="m-prac-horas" style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;">Horas Requeridas *</label>
+                        <div class="input-wrapper">
+                            <input type="number" id="m-prac-horas" min="16" max="320" value="64" required placeholder="64">
+                        </div>
+                    </div>
+                    <div>
+                        <label for="m-prac-cupos" style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;">Cupos *</label>
+                        <div class="input-wrapper">
+                            <input type="number" id="m-prac-cupos" min="1" max="100" value="20" required placeholder="20">
+                        </div>
+                    </div>
+                </div>
+
+                <div style="margin-bottom:4px;">
+                    <label for="m-prac-desc" style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;">Descripción Pedagógica</label>
+                    <div class="input-wrapper">
+                        <textarea id="m-prac-desc" rows="3" placeholder="Objetivos pedagógicos, competencias formativas y alcances en el aula..."></textarea>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary" onclick="closeModalNuevaPractica()">Cancelar</button>
+                <button type="submit" class="btn-primary-sm" id="btnSubmitNuevaPractica">✔ Crear Práctica</button>
+            </div>
+        </form>
     </div>
 </div>
 

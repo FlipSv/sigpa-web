@@ -27,4 +27,8 @@ router.get('/preguntas-guia/:id_practica/:visita', verificarRol(['ESTUDIANTE', '
 router.post('/bitacora', verificarRol(['ESTUDIANTE', 'DIRECTOR']), estudianteController.registrarBitacora);
 router.post('/registrar_bitacora', verificarRol(['ESTUDIANTE', 'DIRECTOR']), estudianteController.registrarBitacora);
 
+// Carga de Evidencias Digitales
+router.post('/subir-evidencia', verificarRol(['ESTUDIANTE', 'DIRECTOR', 'TUTOR', 'COORDINADOR', 'ASESOR']), estudianteController.subirEvidencia);
+router.post('/subir_evidencia', verificarRol(['ESTUDIANTE', 'DIRECTOR', 'TUTOR', 'COORDINADOR', 'ASESOR']), estudianteController.subirEvidencia);
+
 module.exports = router;

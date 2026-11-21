@@ -197,6 +197,9 @@ async function initPool() {
         console.error('    USE_MOCK_DB=true');
         console.error('  Esto activará automáticamente SQLite local (sigpa.db) con todos los datos');
         console.error('  de prueba para programar la interfaz sin bloqueos.\n');
+        if (process.env.NODE_ENV === 'test') {
+            throw err;
+        }
         process.exit(1);
     }
 }

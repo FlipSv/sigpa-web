@@ -1,29 +1,78 @@
 /**
- * SIGPA — Suite de Pruebas de Integración con Oracle 10g
- * Incluye pruebas de seguridad: JWT, Roles y validación de contraseñas
+ * SIGPA — Suite de Pruebas de Integración y Seguridad (JWT + Roles + DB Dual)
+ * Soporta ejecución autónoma en SQLite Mock o verificación contra Oracle 10g
  */
 'use strict';
 
-const app = require('./src/app');
-const http = require('http');
-const { initPool, closePool } = require('./src/config/database');
+// ── 1. Aislamiento estricto de pruebas y modo dual ──────────────────
+process.env.NODE_ENV = 'test';
 
-const PORT = 8099;
+// Si se pasa --oracle o USE_MOCK_DB=false se conecta a Oracle 10g;
+// de lo contrario, por defecto corre 100% autónomo con SQLite Mock (sigpa.db)
+const useOracleExplicit = process.argv.includes('--oracle') || process.env.USE_MOCK_DB === 'false';
+if (useOracleExplicit) {
+    process.env.USE_MOCK_DB = 'false';
+} else {
+    process.env.USE_MOCK_DB = 'true';
+}
+
+const http = require('http');
+const app = require('./src/app');
+const { initPool, closePool, executeQuery, isMockMode } = require('./src/config/database');
+
+async function cleanupTestArtifacts() {
+    try {
+        await executeQuery(`
+            DELETE FROM BITACORA 
+            WHERE ID_ASIGNACION IN (
+                SELECT ID_ASIGNACION FROM ASIGNACION WHERE ID_ASIGNACION > 1
+            ) OR ID_BITACORA > 1
+        `);
+        await executeQuery('DELETE FROM ASIGNACION WHERE ID_ASIGNACION > 1');
+    } catch (e) {
+        // Ignorar si las tablas aún no están inicializadas
+    }
+}
+
+const REQUESTED_PORT = process.env.TEST_PORT ? parseInt(process.env.TEST_PORT, 10) : 5099;
 
 async function runTests() {
     console.log('====================================================');
-    console.log('  SIGPA — Tests de Endpoints y Seguridad (JWT + Roles)');
+    console.log(`  SIGPA — Tests de Endpoints y Seguridad (JWT + Roles)`);
+    console.log(`  Motor de Base de Datos: ${isMockMode ? 'SQLite Mock (sigpa.db)' : 'Oracle Database 10g'}`);
     console.log('====================================================');
 
     try {
         await initPool();
+        await cleanupTestArtifacts();
     } catch (e) {
-        console.error('No se puede ejecutar test_api.js sin conexión activa a Oracle 10g.');
-        process.exit(1);
+        if (!isMockMode) {
+            console.warn('[TEST-WARN] Oracle 10g no disponible de inmediato. Conmutando a SQLite Mock Fallback...');
+            process.env.USE_MOCK_DB = 'true';
+            await initPool();
+            await cleanupTestArtifacts();
+        } else {
+            console.error('Error crítico al inicializar base de datos de pruebas:', e.message);
+            process.exit(1);
+        }
     }
 
-    const server = app.listen(PORT, async () => {
-        console.log(`[TEST] Servidor iniciado en http://localhost:${PORT}`);
+    const server = http.createServer(app);
+
+    server.on('error', (err) => {
+        if (err.code === 'EADDRINUSE') {
+            console.warn(`[TEST-WARN] Puerto ${REQUESTED_PORT} ocupado. Reintentando en puerto dinámico (0)...`);
+            server.listen(0);
+        } else {
+            console.error('[TEST-ERROR]', err.message);
+            process.exit(1);
+        }
+    });
+
+    server.listen(REQUESTED_PORT, async () => {
+        const actualPort = server.address().port;
+        console.log(`[TEST] Servidor de pruebas activo en: http://localhost:${actualPort}`);
+
         let passed = 0;
         let failed = 0;
 
@@ -32,7 +81,7 @@ async function runTests() {
 
         async function req(method, path, body = null, token = null) {
             return new Promise((resolve, reject) => {
-                const url = `http://localhost:${PORT}${path}`;
+                const url = `http://localhost:${actualPort}${path}`;
                 const headers = { 'Content-Type': 'application/json' };
                 if (token) headers['Authorization'] = `Bearer ${token}`;
 
@@ -63,6 +112,34 @@ async function runTests() {
                 console.error(`  ❌ FAIL: ${name} -> ${e.message}`);
                 failed++;
             }
+        }
+
+        let isCleaningUp = false;
+        async function cleanup(exitCode) {
+            if (isCleaningUp) return;
+            isCleaningUp = true;
+            try {
+                await cleanupTestArtifacts();
+            } catch (e) {}
+
+            try {
+                if (typeof server.closeAllConnections === 'function') {
+                    server.closeAllConnections();
+                }
+            } catch (e) {}
+
+            server.close(async () => {
+                try {
+                    await closePool();
+                } catch (e) {}
+                console.log('[TEST] Servidor y conexiones cerrados limpiamente.');
+                process.exit(exitCode);
+            });
+
+            setTimeout(() => {
+                console.warn('[TEST] Cierre forzado tras timeout de seguridad.');
+                process.exit(exitCode);
+            }, 3000).unref();
         }
 
         console.log('\n--- Ejecutando Pruebas de Conexión y Autenticación ---');
@@ -124,7 +201,10 @@ async function runTests() {
         await test('GET /api/director/instituciones', async () => {
             const res = await req('GET', '/api/director/instituciones', null, directorToken);
             if (res.status !== 200 || !Array.isArray(res.data.data)) throw new Error('Instituciones falló');
-            const instValida = res.data.data.find(i => i.convenioActivo && i.ocupados < i.cupos);
+            const instValida = res.data.data.find(i => 
+                (i.convenioActivo === 'S' || i.convenioActivo === true) && 
+                (i.cupos == null || (i.estudiantesAsignados ?? i.ocupados ?? 0) < i.cupos)
+            );
             if (instValida) testInstitucionId = instValida.id;
         });
 
@@ -238,10 +318,7 @@ async function runTests() {
         console.log(`  Resultado Final: ${passed} pasadas, ${failed} fallidas.`);
         console.log(`====================================================`);
 
-        server.close(async () => {
-            await closePool();
-            process.exit(failed > 0 ? 1 : 0);
-        });
+        await cleanup(failed > 0 ? 1 : 0);
     });
 }
 

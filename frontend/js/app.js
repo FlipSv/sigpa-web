@@ -338,6 +338,39 @@ function getCurrentUser() {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
+   RESOLUCIÓN DE ENLACES DE EVIDENCIAS & NAVEGACIÓN RESPONSIVE
+   ═══════════════════════════════════════════════════════════════════════ */
+function resolveEvidenceUrl(url) {
+    if (!url) return '';
+    const clean = String(url).trim();
+    if (clean === '#' || clean === '') return '';
+    if (clean.startsWith('http://') || clean.startsWith('https://')) return clean;
+    if (clean.startsWith('/uploads/')) return clean;
+    if (clean.startsWith('uploads/')) return '/' + clean;
+    return `/uploads/evidencias/${clean}`;
+}
+
+function toggleMobileNav() {
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('sidebarOverlay');
+    if (!sidebar) return;
+    const isAct = sidebar.classList.contains('active') || sidebar.classList.contains('open');
+    if (isAct) {
+        closeMobileNav();
+    } else {
+        sidebar.classList.add('active', 'open');
+        if (overlay) overlay.classList.add('active', 'open');
+    }
+}
+
+function closeMobileNav() {
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('sidebarOverlay');
+    if (sidebar) sidebar.classList.remove('active', 'open');
+    if (overlay) overlay.classList.remove('active', 'open');
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
    DASHBOARD BOOTSTRAP
    ═══════════════════════════════════════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', () => {
@@ -347,6 +380,19 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!user) { window.location.href = 'index.html'; return; }
 
     const rol = (user.rol || '').toUpperCase();
+
+    /* ── Mobile Hamburger & Navigation Listeners ── */
+    const btnHam = document.getElementById('btnHamburger');
+    if (btnHam) {
+        btnHam.addEventListener('click', toggleMobileNav);
+    }
+    const overlay = document.getElementById('sidebarOverlay');
+    if (overlay) {
+        overlay.addEventListener('click', closeMobileNav);
+    }
+    window.addEventListener('resize', () => {
+        if (window.innerWidth > 640) closeMobileNav();
+    });
 
     /* ── Populate sidebar user info ── */
     document.getElementById('navUserName').textContent  = user.nombre || '—';
@@ -398,6 +444,7 @@ function navLabel(text) {
 function setActive(btn) {
     document.querySelectorAll('#sidebarNav .nav-item').forEach(el => el.classList.remove('active'));
     if (btn && btn.classList) btn.classList.add('active');
+    if (window.innerWidth <= 640) closeMobileNav();
 }
 
 function setupRoleNav(user) {
@@ -415,7 +462,7 @@ function setupRoleNav(user) {
             ${navLabel('ADMINISTRACIÓN')}
             ${navItem('👤', 'Gestión de Cuentas',    "loadDirectorView('usuarios', event.currentTarget)")}
             ${navLabel('REPORTES')}
-            ${navItem('📥', 'Exportar Informes',     "sigpaAlert('Módulo de Informes', 'La función de exportación PDF de informes se encuentra en fase de integración institucional.', 'info')")}
+            ${navItem('📥', 'Exportar Informes',     "abrirModalReportes('DIRECTOR')")}
         `;
         setActive(nav.querySelectorAll('.nav-item')[0]);
         setTopbarCTA('➕', 'Nueva Práctica', "openModalNuevaPractica()");
@@ -442,6 +489,8 @@ function setupRoleNav(user) {
             ${navItem('👥', 'Mis Practicantes',       "loadTutorView('estudiantes', event.currentTarget)")}
             ${navLabel('EVALUACIÓN')}
             ${navItem('📊', 'Estadísticas del Grupo', "loadTutorView('bitacoras', event.currentTarget)")}
+            ${navLabel('REPORTES')}
+            ${navItem('📄', 'Informes & Actas PDF',   "abrirModalReportes('TUTOR')")}
         `;
         setActive(nav.querySelectorAll('.nav-item')[0]);
         setTopbarCTA('📅', 'Agendar Visita', "sigpaAlert('Agenda de Visitas', 'El módulo de agendamiento de visitas de supervisión se encuentra en fase de despliegue.', 'info')");
@@ -453,7 +502,7 @@ function setupRoleNav(user) {
             ${navItem('🏫', 'Practicantes en Aula',   "loadAsesorView('estudiantes', event.currentTarget)")}
             ${navItem('🔍', 'Bitácoras & Visitas',    "loadAsesorView('bitacoras', event.currentTarget)")}
             ${navLabel('REPORTES')}
-            ${navItem('📋', 'Reporte de Avales',      "sigpaAlert('Reporte de Avales', 'El reporte consolidado de avales in situ estará disponible en la próxima actualización.', 'info')")}
+            ${navItem('📋', 'Reporte de Avales',      "abrirModalReportes('ASESOR')")}
         `;
         setActive(nav.querySelectorAll('.nav-item')[0]);
         loadAsesorView('estudiantes');
@@ -831,7 +880,7 @@ async function loadDirectorView(tab, btn) {
                     <table class="data-table">
                         <thead><tr>
                             <th>Estudiante</th><th>Práctica</th><th>Institución</th>
-                            <th>Tutor</th><th>Progreso de Horas</th><th>Estado</th>
+                            <th>Tutor</th><th>Progreso de Horas</th><th>Estado</th><th>Acciones</th>
                         </tr></thead>
                         <tbody>
                             ${asigs.map(a => `
@@ -841,7 +890,14 @@ async function loadDirectorView(tab, btn) {
                                 <td>${a.institucion || '<span class="text-muted">Sin asignar</span>'}</td>
                                 <td>${a.tutor || '<span class="text-muted">Sin tutor</span>'}</td>
                                 <td>${progressBarCell(a.horasAcumuladas, a.horasRequeridas)}</td>
-                                <td><span class="status-badge ${a.estado === 'APROBADA' ? 'status-open' : 'status-pending'}">${a.estado}</span></td>
+                                <td><span class="status-badge ${a.estado === 'APROBADA' || a.estado === 'CERRADA' ? 'status-open' : 'status-pending'}">${a.estado}</span></td>
+                                <td>
+                                    <button class="btn-primary-sm" style="font-size:11.5px;padding:4px 8px;"
+                                        onclick="descargarActaCierre({ idAsignacion: ${a.id}, estudiante: '${a.estudiante.replace(/'/g, "\\'")}', tutor: '${(a.tutor || '').replace(/'/g, "\\'")}', institucion: '${(a.institucion || '').replace(/'/g, "\\'")}', horasAcumuladas: ${a.horasAcumuladas}, horasRequeridas: ${a.horasRequeridas} })"
+                                        title="Generar y descargar Acta de Cierre en PDF">
+                                        📄 Acta PDF
+                                    </button>
+                                </td>
                             </tr>`).join('')}
                         </tbody>
                     </table>
@@ -1050,18 +1106,32 @@ async function loadEstudianteView(tab, btn) {
             };
 
             const bitacoras = bitRes.data || [];
-            const calificadas = bitacoras.filter(b => b.nota != null);
+            const calificadas = bitacoras.filter(b => b.nota != null || b.estado === 'CALIFICADA' || b.estado === 'APROBADA');
+            const pendientes = bitacoras.filter(b => b.estado === 'PENDIENTE');
+            const rechazadas = bitacoras.filter(b => b.estado === 'RECHAZADA');
+
+            const horasRegistradas = bitacoras.reduce((sum, b) => sum + Number(b.horas || 0), 0);
+            const horasAprobadas = calificadas.reduce((sum, b) => sum + Number(b.horas || 0), 0);
+            const horasPendientes = pendientes.reduce((sum, b) => sum + Number(b.horas || 0), 0);
+            const horasRechazadas = rechazadas.reduce((sum, b) => sum + Number(b.horas || 0), 0);
+
+            // Sincronizar horas aprobadas con datos del servidor asegurando consistencia total
+            const horasValidadas = Math.max(horasAprobadas, Number(data.horasAcumuladas || 0));
+            const metaHoras = Number(data.horasRequeridas || 64);
+            const pctReal = metaHoras > 0 ? Math.min(100, Math.round((horasValidadas / metaHoras) * 100)) : 0;
+            const horasFaltantes = Math.max(0, metaHoras - horasValidadas);
+
             const notasProm = calificadas.length > 0 
-                ? (calificadas.reduce((s, b) => s + parseFloat(b.nota), 0) / calificadas.length).toFixed(1)
+                ? (calificadas.reduce((s, b) => s + parseFloat(b.nota != null ? b.nota : 5.0), 0) / calificadas.length).toFixed(1)
                 : '—';
 
             main.innerHTML = `
-            <!-- KPI Row -->
+            <!-- KPI Row: Desglose transparente y cálculo exacto de horas -->
             <div class="kpi-row">
-                ${kpiCard('kpi-accent','kpi-icon-accent','⏱️','Horas Cumplidas', `${data.horasAcumuladas}/${data.horasRequeridas}`, 'hrs validadas vs. meta', null, .05)}
-                ${kpiCard('kpi-success','kpi-icon-success','📈','Avance Formativo', `${prog.porcentaje}%`, 'Porcentaje acumulado', prog.porcentaje >= 50 ? 8 : null, .10)}
+                ${kpiCard('kpi-accent','kpi-icon-accent','⏱️','Horas Aprobadas', `${horasValidadas}/${metaHoras} hrs`, `${horasRegistradas}h registradas (${horasPendientes}h en revisión, ${horasRechazadas}h rechazadas)`, null, .05)}
+                ${kpiCard('kpi-success','kpi-icon-success','📈','Avance Formativo', `${pctReal}%`, `${horasFaltantes > 0 ? horasFaltantes + ' hrs restantes para 100%' : '¡100% de la meta cumplida!'}`, pctReal >= 50 ? 8 : null, .10)}
                 ${kpiCard('kpi-teal','kpi-icon-teal','⭐','Promedio Académico', notasProm !== '—' ? `${notasProm}/5.0` : '—', `${calificadas.length} visitas evaluadas`, null, .15)}
-                ${kpiCard('kpi-purple','kpi-icon-purple','📁','Diarios de Campo', bitacoras.length, `${bitacoras.filter(b=>b.estado==='PENDIENTE').length} en revisión`, null, .20)}
+                ${kpiCard('kpi-purple','kpi-icon-purple','📁','Diarios de Campo', bitacoras.length, `${horasRegistradas} hrs totales (${pendientes.length} pendientes)`, null, .20)}
             </div>
 
             <!-- 🚦 MEDIDOR PREDICTIVO / SEMÁFORO DE CUMPLIMIENTO -->
@@ -1083,8 +1153,8 @@ async function loadEstudianteView(tab, btn) {
                 <div class="predictive-grid">
                     <div class="predictive-stat">
                         <div class="predictive-stat-label">Horas Faltantes</div>
-                        <div class="predictive-stat-value" style="color: ${prog.semaforoColor};">${prog.horasRestantes || Math.max(0, data.horasRequeridas - data.horasAcumuladas)} hrs</div>
-                        <div class="predictive-stat-sub">de ${data.horasRequeridas} hrs requeridas</div>
+                        <div class="predictive-stat-value" style="color: ${prog.semaforoColor};">${horasFaltantes} hrs</div>
+                        <div class="predictive-stat-sub">de ${metaHoras} hrs requeridas</div>
                     </div>
                     <div class="predictive-stat">
                         <div class="predictive-stat-label">Ritmo Promedio</div>
@@ -1207,7 +1277,7 @@ async function loadEstudianteView(tab, btn) {
             </div>`;
 
             /* Render Charts */
-            _renderEstudianteCharts(bitacoras, data.horasRequeridas, data.horasAcumuladas, notasProm !== '—' ? notasProm : 3.8);
+            _renderEstudianteCharts(bitacoras, metaHoras, horasValidadas, notasProm !== '—' ? notasProm : 3.8);
 
         } catch (e) {
             main.innerHTML = errorState('Error al cargar tu práctica: ' + e.message);
@@ -1490,10 +1560,10 @@ async function loadEstudianteView(tab, btn) {
                                             onclick="openModalPreviewEvidencia('${encodeURIComponent(ev.urlEvidencia)}', '${ev.tipo}', ${ev.visita}, '${ev.fecha}', '${ev.nota || ''}', '${ev.comentarios || ''}')">
                                             👁️ Previsualizar
                                         </button>
-                                        <a href="${ev.urlEvidencia.startsWith('http') ? ev.urlEvidencia : '#'}"
+                                        <a href="${resolveEvidenceUrl(ev.urlEvidencia)}"
                                             target="_blank" rel="noopener noreferrer"
                                             class="btn-primary-sm" style="font-size:12px;padding:6px 10px;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;">
-                                            ↗ Abrir Enlace
+                                            ↗ Abrir Evidencia
                                         </a>
                                     </div>
                                 </div>
@@ -1562,7 +1632,7 @@ async function loadEstudianteView(tab, btn) {
                                         <!-- Evidencia vinculada -->
                                         ${item.evidencia ? `
                                         <div style="margin-bottom: 14px;">
-                                            <a href="${item.evidencia.startsWith('http') ? item.evidencia : '#'}" target="_blank" rel="noopener noreferrer"
+                                            <a href="${resolveEvidenceUrl(item.evidencia)}" target="_blank" rel="noopener noreferrer"
                                                 style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--accent); text-decoration: none; font-weight: 600;">
                                                 📎 Ver Soporte de Evidencia (${item.evidencia.length > 45 ? item.evidencia.substring(0,45) + '...' : item.evidencia}) ↗
                                             </a>
@@ -1891,9 +1961,9 @@ function openModalPreviewEvidencia(encodedUrl, tipo, visita, fecha, nota, coment
                         Enlace del Soporte Académico
                     </h4>
                     <p style="font-size: 12.5px; color: #475569; word-break: break-all; background: #ffffff; padding: 8px 12px; border-radius: 6px; border: 1px solid #e2e8f0; margin-bottom: 12px;">
-                        <code>${url}</code>
+                        <code>${resolveEvidenceUrl(url)}</code>
                     </p>
-                    <a href="${url.startsWith('http') ? url : '#'}" target="_blank" rel="noopener noreferrer"
+                    <a href="${resolveEvidenceUrl(url)}" target="_blank" rel="noopener noreferrer"
                         class="btn-primary-sm" style="text-decoration:none;display:inline-block;">
                         ↗ Abrir en Nueva Pestaña Segura
                     </a>
@@ -2175,6 +2245,8 @@ async function loadTutorView(tab, btn) {
             ]);
             const bits  = bRes.data  || [];
             const asigs = aRes.data  || [];
+            window._currentTutorBitacoras = bits;
+            window._currentTutorAsigs = asigs;
 
             const pendientes  = bits.filter(b => b.estado !== 'CALIFICADA').length;
             const calificadas = bits.filter(b => b.estado === 'CALIFICADA').length;
@@ -2274,11 +2346,11 @@ async function loadTutorView(tab, btn) {
                         <table class="data-table">
                             <thead><tr>
                                 <th>Estudiante</th><th>Práctica & Institución</th><th>Visita</th>
-                                <th>Horas</th><th>Estado</th><th>Nota</th><th>Acción</th>
+                                <th>Horas</th><th>Estado</th><th>Nota</th><th>Evidencia</th><th>Acción</th>
                             </tr></thead>
                             <tbody>
                                 ${bits.length === 0
-                                    ? `<tr><td colspan="7" style="text-align:center;padding:32px;color:#94a3b8;">No hay bitácoras recibidas aún.</td></tr>`
+                                    ? `<tr><td colspan="8" style="text-align:center;padding:32px;color:#94a3b8;">No hay bitácoras recibidas aún.</td></tr>`
                                     : bits.map(b => `
                                 <tr>
                                     <td><strong>${b.estudiante}</strong></td>
@@ -2288,10 +2360,20 @@ async function loadTutorView(tab, btn) {
                                     <td><span class="status-badge ${b.estado === 'CALIFICADA' ? 'status-graded' : 'status-pending'}">${b.estado}</span></td>
                                     <td>${b.nota ? `<strong style="color:var(--success)">${b.nota}</strong>` : '—'}</td>
                                     <td>
-                                        <button class="btn-primary-sm" style="padding:5px 10px;font-size:12px;"
-                                            onclick="openModalCalificar(${b.id}, '${b.estudiante}', ${b.visita})">
-                                            ${b.estado === 'CALIFICADA' ? '✏️ Editar' : '🎯 Calificar'}
-                                        </button>
+                                        ${b.evidencia ? `<a href="${resolveEvidenceUrl(b.evidencia)}" target="_blank" rel="noopener noreferrer" style="font-size:12px;color:var(--accent);text-decoration:none;font-weight:600;" title="Ver archivo de evidencia">📎 Evidencia ↗</a>` : '<span class="text-muted" style="font-size:11.5px;">—</span>'}
+                                    </td>
+                                    <td>
+                                        <div style="display:flex;gap:5px;align-items:center;">
+                                            <button class="btn-primary-sm" style="padding:5px 10px;font-size:12px;"
+                                                onclick="openModalCalificar(${b.id}, '${b.estudiante.replace(/'/g, "\\'")}', ${b.visita})">
+                                                ${b.estado === 'CALIFICADA' ? '✏️ Editar' : '🎯 Calificar'}
+                                            </button>
+                                            <button class="btn-secondary" style="padding:5px 8px;font-size:11.5px;"
+                                                onclick="descargarReporteVisita({ idBitacora: ${b.id}, visita: ${b.visita}, estudiante: '${b.estudiante.replace(/'/g, "\\'")}', institucion: '${b.institucion.replace(/'/g, "\\'")}', nota: ${b.nota || 5.0}, comentarios: '${(b.comentarios || '').replace(/'/g, "\\'")}' })"
+                                                title="Descargar Informe de Visita en PDF">
+                                                📄 PDF
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>`).join('')}
                             </tbody>
@@ -2322,7 +2404,7 @@ async function loadTutorView(tab, btn) {
                     <table class="data-table">
                         <thead><tr>
                             <th>Estudiante</th><th>Práctica</th><th>Institución</th>
-                            <th>Progreso de Horas</th><th>Estado</th>
+                            <th>Progreso de Horas</th><th>Estado</th><th>Acciones</th>
                         </tr></thead>
                         <tbody>
                             ${asigs.map(a => `
@@ -2335,6 +2417,13 @@ async function loadTutorView(tab, btn) {
                                 <td>${a.institucion}</td>
                                 <td>${progressBarCell(a.horasAcumuladas, a.horasRequeridas)}</td>
                                 <td><span class="status-badge status-open">${a.estado}</span></td>
+                                <td>
+                                    <button class="btn-primary-sm" style="font-size:11.5px;padding:4px 8px;"
+                                        onclick="descargarActaCierre({ idAsignacion: ${a.id}, estudiante: '${a.estudiante.replace(/'/g, "\\'")}', tutor: '${(user.nombre || '').replace(/'/g, "\\'")}', institucion: '${(a.institucion || '').replace(/'/g, "\\'")}', horasAcumuladas: ${a.horasAcumuladas}, horasRequeridas: ${a.horasRequeridas} })"
+                                        title="Descargar Acta de Cierre en PDF">
+                                        📄 Acta PDF
+                                    </button>
+                                </td>
                             </tr>`).join('')}
                         </tbody>
                     </table>
@@ -2427,6 +2516,7 @@ async function loadAsesorView(tab, btn) {
     try {
         const res  = await fetch(`${API_BASE}/asesor/bitacoras`);
         const bits = (await res.json()).data || [];
+        window._currentAsesorBitacoras = bits;
 
         const conAval  = bits.filter(b => b.comentarios).length;
         const sinAval  = bits.filter(b => !b.comentarios).length;
@@ -2454,7 +2544,7 @@ async function loadAsesorView(tab, btn) {
         <!-- Quick Actions -->
         <div class="quick-actions-bar">
             <span class="quick-actions-label">Acciones:</span>
-            <button class="btn-secondary" onclick="sigpaAlert('Reporte de Avales', 'El reporte consolidado de avales institucionales se encuentra en desarrollo.', 'info')">📋 Reporte de Avales</button>
+            <button class="btn-secondary" onclick="abrirModalReportes('ASESOR')">📋 Reporte de Avales PDF</button>
         </div>
 
         <!-- Charts Row -->
@@ -2506,11 +2596,11 @@ async function loadAsesorView(tab, btn) {
                 <table class="data-table">
                     <thead><tr>
                         <th>Practicante</th><th>Colegio / Institución</th><th>Visita</th>
-                        <th>Horas</th><th>Concepto In Situ</th><th>Acción</th>
+                        <th>Horas</th><th>Concepto In Situ</th><th>Evidencia</th><th>Acción</th>
                     </tr></thead>
                     <tbody>
                         ${bits.length === 0
-                            ? `<tr><td colspan="6" style="text-align:center;padding:32px;color:#94a3b8;">No hay visitas registradas aún.</td></tr>`
+                            ? `<tr><td colspan="7" style="text-align:center;padding:32px;color:#94a3b8;">No hay visitas registradas aún.</td></tr>`
                             : bits.map(b => `
                         <tr>
                             <td><strong>${b.estudiante}</strong></td>
@@ -2521,8 +2611,11 @@ async function loadAsesorView(tab, btn) {
                                 ? `<span class="text-muted" style="font-style:italic;">"${b.comentarios.substring(0, 60)}${b.comentarios.length > 60 ? '...' : ''}"</span>`
                                 : `<span class="status-badge status-pending">Pendiente de aval</span>`}</td>
                             <td>
+                                ${b.evidencia ? `<a href="${resolveEvidenceUrl(b.evidencia)}" target="_blank" rel="noopener noreferrer" style="font-size:12px;color:var(--accent);text-decoration:none;font-weight:600;" title="Ver archivo de evidencia">📎 Evidencia ↗</a>` : '<span class="text-muted" style="font-size:11.5px;">—</span>'}
+                            </td>
+                            <td>
                                 <button class="btn-primary-sm" style="padding:5px 10px;font-size:12px;"
-                                    onclick="openModalAsesorEval(${b.id}, '${b.estudiante}', ${b.visita})">
+                                    onclick="openModalAsesorEval(${b.id}, '${b.estudiante.replace(/'/g, "\\'")}', ${b.visita})">
                                     ${b.comentarios ? '✏️ Editar Aval' : '✅ Validar Visita'}
                                 </button>
                             </td>
@@ -2610,22 +2703,164 @@ async function cambiarEstadoPractica(id, nuevoEstado) {
 }
 
 function openModalNuevaPractica() {
-    document.getElementById('modalContainer').innerHTML = `
+    const modal = document.getElementById('modalNuevaPractica');
+    if (modal) {
+        modal.style.display = 'flex';
+        const inputNombre = document.getElementById('m-prac-nombre');
+        if (inputNombre) inputNombre.focus();
+        return;
+    }
+    // Fallback dinámico inyectado en modalContainer
+    const mc = document.getElementById('modalContainer');
+    mc.innerHTML = `
     <div class="modal-overlay" onclick="closeModal(event)">
-        <div class="modal-content" onclick="event.stopPropagation()">
+        <div class="modal-content" onclick="event.stopPropagation()" style="max-width: 540px;">
             <div class="modal-header">
                 <h3 class="modal-title">➕ Nueva Práctica Pedagógica</h3>
-                <button class="btn-close" onclick="closeModal()">×</button>
+                <button type="button" class="btn-close" onclick="closeModal()">×</button>
             </div>
-            <div class="modal-body">
-                <p class="text-muted" style="font-size:13.5px;margin-bottom:4px;">Las nuevas prácticas se añaden al catálogo institucional de la Dirección de Programa.</p>
-            </div>
-            <div class="modal-footer">
-                <button class="btn-secondary" onclick="closeModal()">Cerrar</button>
-                <button class="btn-primary-sm" onclick="sigpaAlert('Módulo en Desarrollo', 'El catálogo institucional de creación de prácticas se encuentra en fase de desarrollo.');closeModal()">Crear Práctica</button>
-            </div>
+            <form onsubmit="handleGuardarPractica(event)">
+                <div class="modal-body">
+                    <div style="margin-bottom:12px;">
+                        <label for="m-prac-nombre" style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;">Nombre de la Práctica *</label>
+                        <div class="input-wrapper">
+                            <input type="text" id="m-prac-nombre" required placeholder="ej. Práctica Pedagógica I - Observación Contextual">
+                        </div>
+                    </div>
+
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+                        <div>
+                            <label for="m-prac-semestre" style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;">Semestre Curricular *</label>
+                            <div class="input-wrapper">
+                                <select id="m-prac-semestre" required style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:13.5px;background:var(--bg-card);color:var(--text-main);">
+                                    <option value="1">P1 — Semestre 1</option>
+                                    <option value="2">P2 — Semestre 2</option>
+                                    <option value="3">P3 — Semestre 3</option>
+                                    <option value="4">P4 — Semestre 4</option>
+                                    <option value="5">P5 — Semestre 5</option>
+                                    <option value="6">P6 — Semestre 6</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div>
+                            <label for="m-prac-tipo" style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;">Código / Modalidad *</label>
+                            <div class="input-wrapper">
+                                <select id="m-prac-tipo" required style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:13.5px;background:var(--bg-card);color:var(--text-main);">
+                                    <option value="OBSERVACION">Observación</option>
+                                    <option value="INVESTIGATIVA">Investigativa</option>
+                                    <option value="INTERVENCION">Intervención</option>
+                                    <option value="INTEGRAL">Integral / Formativa</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px;">
+                        <div>
+                            <label for="m-prac-creditos" style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;">Créditos *</label>
+                            <div class="input-wrapper">
+                                <input type="number" id="m-prac-creditos" min="1" max="10" value="3" required placeholder="3">
+                            </div>
+                        </div>
+                        <div>
+                            <label for="m-prac-horas" style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;">Horas Requeridas *</label>
+                            <div class="input-wrapper">
+                                <input type="number" id="m-prac-horas" min="16" max="320" value="64" required placeholder="64">
+                            </div>
+                        </div>
+                        <div>
+                            <label for="m-prac-cupos" style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;">Cupos *</label>
+                            <div class="input-wrapper">
+                                <input type="number" id="m-prac-cupos" min="1" max="100" value="20" required placeholder="20">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom:4px;">
+                        <label for="m-prac-desc" style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;">Descripción Pedagógica</label>
+                        <div class="input-wrapper">
+                            <textarea id="m-prac-desc" rows="3" placeholder="Objetivos pedagógicos, competencias formativas y alcances en el aula..."></textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-secondary" onclick="closeModal()">Cancelar</button>
+                    <button type="submit" class="btn-primary-sm">✔ Crear Práctica</button>
+                </div>
+            </form>
         </div>
     </div>`;
+}
+
+function closeModalNuevaPractica(e) {
+    if (!e || e.target.id === 'modalNuevaPractica' || (e.target.classList && e.target.classList.contains('btn-close')) || (e.target.classList && e.target.classList.contains('btn-secondary'))) {
+        const modal = document.getElementById('modalNuevaPractica');
+        if (modal) modal.style.display = 'none';
+        const form = document.getElementById('formNuevaPractica');
+        if (form) form.reset();
+    }
+}
+
+async function handleGuardarPractica(e) {
+    e.preventDefault();
+    const nombre = (document.getElementById('m-prac-nombre') ? document.getElementById('m-prac-nombre').value : '').trim();
+    const semestre = document.getElementById('m-prac-semestre') ? Number(document.getElementById('m-prac-semestre').value) : 1;
+    const tipo = document.getElementById('m-prac-tipo') ? document.getElementById('m-prac-tipo').value : 'OBSERVACION';
+    const creditos = document.getElementById('m-prac-creditos') ? Number(document.getElementById('m-prac-creditos').value) : 3;
+    const horas = document.getElementById('m-prac-horas') ? Number(document.getElementById('m-prac-horas').value) : 64;
+    const cupos = document.getElementById('m-prac-cupos') ? Number(document.getElementById('m-prac-cupos').value) : 20;
+    const descripcion = (document.getElementById('m-prac-desc') ? document.getElementById('m-prac-desc').value : '').trim();
+
+    // Client-side validations
+    if (!nombre) {
+        await sigpaAlert('Campo Obligatorio', 'Por favor ingresa el nombre de la práctica pedagógica.', 'warning');
+        return;
+    }
+    if (isNaN(creditos) || creditos <= 0) {
+        await sigpaAlert('Valor Inválido', 'Los créditos deben ser un valor numérico positivo mayor a 0.', 'warning');
+        return;
+    }
+    if (isNaN(horas) || horas <= 0) {
+        await sigpaAlert('Valor Inválido', 'Las horas requeridas deben ser un valor numérico positivo mayor a 0.', 'warning');
+        return;
+    }
+    if (isNaN(cupos) || cupos <= 0) {
+        await sigpaAlert('Valor Inválido', 'Los cupos deben ser un valor numérico positivo mayor a 0.', 'warning');
+        return;
+    }
+
+    try {
+        const token = getToken();
+        const headers = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+
+        const res = await fetch(`${API_BASE}/director/nueva_practica`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+                nombre,
+                semestre,
+                tipo,
+                creditos,
+                horas,
+                horas_requeridas: horas,
+                cupos,
+                descripcion
+            })
+        });
+        const d = await res.json();
+        if (d.success) {
+            closeModalNuevaPractica();
+            closeModal();
+            await sigpaAlert('Práctica Creada', d.message || 'La nueva práctica ha sido registrada exitosamente en el catálogo institucional.', 'success');
+            // Dynamically refresh practice list/table
+            loadDirectorView('practicas');
+        } else {
+            sigpaAlert('Atención', d.message || d.error || 'No fue posible registrar la práctica', 'warning');
+        }
+    } catch (err) {
+        sigpaAlert('Error de Red', err.message, 'error');
+    }
 }
 
 function openModalNuevaInstitucion() {
@@ -2905,33 +3140,83 @@ async function cambiarEstadoUsuario(idUsuario, nuevoEstado) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
-   TUTOR MODALS
+   TUTOR MODALS (EVALUACIÓN TRANSPARENTE CON 3 MOMENTOS Y EVIDENCIAS)
    ═══════════════════════════════════════════════════════════════════════ */
 
 function openModalCalificar(idBitacora, estudiante, visita) {
     const user = getCurrentUser();
+    const bit = (window._currentTutorBitacoras || []).find(b => b.id === Number(idBitacora)) || {};
+    const evidenciaUrl = resolveEvidenceUrl(bit.evidencia);
+
     document.getElementById('modalContainer').innerHTML = `
     <div class="modal-overlay" onclick="closeModal(event)">
-        <div class="modal-content" onclick="event.stopPropagation()">
+        <div class="modal-content" onclick="event.stopPropagation()" style="max-width: 680px; max-height: 90vh; overflow-y: auto;">
             <div class="modal-header">
-                <h3 class="modal-title">🎯 Calificar Bitácora — Visita ${visita}</h3>
+                <h3 class="modal-title">🎯 Calificar y Retroalimentar — Visita ${visita}</h3>
                 <button class="btn-close" onclick="closeModal()">×</button>
             </div>
             <form onsubmit="handleGuardarCalificacion(event, ${idBitacora}, ${user.id})">
                 <div class="modal-body">
+                    <!-- Resumen del practicante y horas -->
                     <div class="alert-box alert-info" style="margin-bottom:16px;">
-                        <strong>Practicante:</strong> ${estudiante}
-                    </div>
-                    <div style="margin-bottom:14px;">
-                        <label style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;">Calificación (escala 0.0 a 5.0)</label>
-                        <div class="input-wrapper">
-                            <input type="number" id="m-eval-nota" min="0.0" max="5.0" step="0.1" value="4.5" required>
+                        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+                            <div>
+                                <strong>Practicante:</strong> ${estudiante || bit.estudiante || 'Estudiante'} &nbsp;|&nbsp;
+                                <strong>Práctica:</strong> ${bit.practica || 'Pedagógica'}
+                            </div>
+                            <div>
+                                <span class="badge" style="background:var(--accent,#4f46e5);color:white;padding:3px 8px;border-radius:4px;font-size:11.5px;font-weight:700;">
+                                    ⏱️ ${bit.horas || 0} Horas de Sesión
+                                </span>
+                                ${bit.fecha ? `&nbsp;<span class="text-muted" style="font-size:11.5px;">📅 ${bit.fecha}</span>` : ''}
+                            </div>
                         </div>
                     </div>
+
+                    <!-- Desglose Transparente: Actividades y 3 Momentos Pedagógicos -->
+                    <div style="margin-bottom:16px;background:var(--bg-main,#f8fafc);border:1px solid var(--border,#e2e8f0);border-radius:8px;padding:14px;">
+                        <h4 style="font-size:13px;font-weight:800;color:var(--text-main);margin-bottom:10px;display:flex;align-items:center;gap:6px;">
+                            <span>📝</span> Detalle de la Bitácora y Momentos Pedagógicos
+                        </h4>
+                        ${renderMomentoPedagogicoHTML(bit.actividades, bit.observaciones)}
+                    </div>
+
+                    <!-- Enlace directo a Evidencia -->
+                    <div style="margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 14px;">
+                        <span style="font-size:12.5px;color:#166534;font-weight:600;display:flex;align-items:center;gap:6px;">
+                            <span>📁</span> Soporte de Evidencia Digital:
+                        </span>
+                        ${evidenciaUrl ? `
+                            <a href="${evidenciaUrl}" target="_blank" rel="noopener noreferrer"
+                               class="btn-primary-sm" style="font-size:12px;padding:5px 12px;text-decoration:none;display:inline-flex;align-items:center;gap:4px;">
+                               📎 Ver Archivo Adjunto (${bit.evidencia && bit.evidencia.length > 30 ? bit.evidencia.substring(0, 30) + '...' : (bit.evidencia || 'Evidencia')}) ↗
+                            </a>
+                        ` : `
+                            <span class="text-muted" style="font-size:12px;font-style:italic;">No se adjuntó archivo de evidencia</span>
+                        `}
+                    </div>
+
+                    <!-- Formulario de Evaluación Cuantitativa y Cualitativa -->
+                    <div style="display:grid;grid-template-columns:1fr 2fr;gap:14px;margin-bottom:14px;">
+                        <div>
+                            <label style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;">Calificación (0.0 a 5.0) *</label>
+                            <div class="input-wrapper">
+                                <input type="number" id="m-eval-nota" min="0.0" max="5.0" step="0.1" value="${bit.nota != null ? bit.nota : '4.5'}" required>
+                            </div>
+                        </div>
+                        <div>
+                            <label style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;">Descargar Informe Preliminar</label>
+                            <button type="button" class="btn-secondary" style="width:100%;height:38px;font-size:12px;"
+                                onclick="descargarReporteVisita({ idBitacora: ${idBitacora}, visita: ${visita}, estudiante: '${(estudiante || '').replace(/'/g, "\\'")}', institucion: '${(bit.institucion || '').replace(/'/g, "\\'")}', nota: document.getElementById('m-eval-nota').value, comentarios: document.getElementById('m-eval-comentarios').value })">
+                                📄 Generar Informe PDF
+                            </button>
+                        </div>
+                    </div>
+
                     <div style="margin-bottom:4px;">
-                        <label style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;">Concepto Pedagógico y Retroalimentación</label>
+                        <label style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;">Concepto Pedagógico y Retroalimentación *</label>
                         <div class="input-wrapper">
-                            <textarea id="m-eval-comentarios" rows="3" required placeholder="Fortalezas, recomendaciones y aspectos a mejorar..."></textarea>
+                            <textarea id="m-eval-comentarios" rows="3" required placeholder="Fortalezas pedagógicas demostradas, recomendaciones didácticas y compromisos para la siguiente visita...">${bit.comentarios || ''}</textarea>
                         </div>
                     </div>
                 </div>
@@ -2965,28 +3250,67 @@ async function handleGuardarCalificacion(e, idBitacora, idEvaluador) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
-   ASESOR MODALS
+   ASESOR MODALS (AVAL IN SITU TRANSPARENTE CON 3 MOMENTOS Y EVIDENCIAS)
    ═══════════════════════════════════════════════════════════════════════ */
 
 function openModalAsesorEval(idBitacora, estudiante, visita) {
     const user = getCurrentUser();
+    const bit = (window._currentAsesorBitacoras || []).find(b => b.id === Number(idBitacora)) || {};
+    const evidenciaUrl = resolveEvidenceUrl(bit.evidencia);
+
     document.getElementById('modalContainer').innerHTML = `
     <div class="modal-overlay" onclick="closeModal(event)">
-        <div class="modal-content" onclick="event.stopPropagation()">
+        <div class="modal-content" onclick="event.stopPropagation()" style="max-width: 680px; max-height: 90vh; overflow-y: auto;">
             <div class="modal-header">
                 <h3 class="modal-title">✅ Aval In Situ — Visita ${visita}</h3>
                 <button class="btn-close" onclick="closeModal()">×</button>
             </div>
             <form onsubmit="handleGuardarAsesorEval(event, ${idBitacora}, ${user.id})">
                 <div class="modal-body">
+                    <!-- Resumen del practicante e institución -->
                     <div class="alert-box alert-info" style="margin-bottom:16px;">
-                        <strong>Practicante:</strong> ${estudiante}
+                        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:gap:8px;">
+                            <div>
+                                <strong>Practicante:</strong> ${estudiante || bit.estudiante || 'Estudiante'} &nbsp;|&nbsp;
+                                <strong>Institución:</strong> ${bit.institucion || 'Colegio Sede'}
+                            </div>
+                            <div>
+                                <span class="badge" style="background:var(--success,#10b981);color:white;padding:3px 8px;border-radius:4px;font-size:11.5px;font-weight:700;">
+                                    ⏱️ ${bit.horas || 0} Horas en Aula
+                                </span>
+                                ${bit.fecha ? `&nbsp;<span class="text-muted" style="font-size:11.5px;">📅 ${bit.fecha}</span>` : ''}
+                            </div>
+                        </div>
                     </div>
+
+                    <!-- Desglose Pedagógico Transparente -->
+                    <div style="margin-bottom:16px;background:var(--bg-main,#f8fafc);border:1px solid var(--border,#e2e8f0);border-radius:8px;padding:14px;">
+                        <h4 style="font-size:13px;font-weight:800;color:var(--text-main);margin-bottom:10px;display:flex;align-items:center;gap:6px;">
+                            <span>📝</span> Actividades y Momentos Pedagógicos Diligenciados
+                        </h4>
+                        ${renderMomentoPedagogicoHTML(bit.actividades, bit.observaciones)}
+                    </div>
+
+                    <!-- Enlace directo a Evidencia -->
+                    <div style="margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 14px;">
+                        <span style="font-size:12.5px;color:#166534;font-weight:600;display:flex;align-items:center;gap:6px;">
+                            <span>📁</span> Soporte de Evidencia Digital:
+                        </span>
+                        ${evidenciaUrl ? `
+                            <a href="${evidenciaUrl}" target="_blank" rel="noopener noreferrer"
+                               class="btn-primary-sm" style="font-size:12px;padding:5px 12px;text-decoration:none;display:inline-flex;align-items:center;gap:4px;">
+                               📎 Ver Archivo Adjunto (${bit.evidencia && bit.evidencia.length > 30 ? bit.evidencia.substring(0, 30) + '...' : (bit.evidencia || 'Evidencia')}) ↗
+                            </a>
+                        ` : `
+                            <span class="text-muted" style="font-size:12px;font-style:italic;">No se adjuntó archivo de evidencia</span>
+                        `}
+                    </div>
+
                     <div style="margin-bottom:4px;">
-                        <label style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;">Observación del Desempeño In Situ</label>
+                        <label style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;">Observación del Desempeño In Situ y Aval de Cumplimiento *</label>
                         <div class="input-wrapper">
                             <textarea id="m-asesor-comentarios" rows="4" required
-                                placeholder="Consigna la puntualidad, trato con los niños, apoyo a la docente titular y aspectos destacados..."></textarea>
+                                placeholder="Consigna la puntualidad, trato afectuoso con los niños, apoyo a la docente titular, dominio de grupo y aspectos formativos destacados...">${bit.comentarios || ''}</textarea>
                         </div>
                     </div>
                 </div>
@@ -3016,6 +3340,229 @@ async function handleGuardarAsesorEval(e, idBitacora, idEvaluador) {
             sigpaAlert('Atención', d.message, 'warning');
         }
     } catch (err) { sigpaAlert('Error de Conexión', err.message, 'error'); }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   INTEGRACIÓN DE REPORTES PDF (MICROSERVICIO & GATEWAY)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+async function descargarReporteVisita(datos) {
+    try {
+        await sigpaAlert('Generando Informe', 'Compilando informe de visita en formato PDF institucional...', 'info');
+
+        const payload = {
+            id_bitacora: datos.idBitacora || datos.id || 1,
+            visita: datos.visita || 1,
+            estudiante: datos.estudiante || 'Estudiante UDI',
+            tutor: datos.tutor || 'Tutor UDI',
+            institucion: datos.institucion || 'Institución Educativa',
+            fecha_visita: datos.fecha || new Date().toISOString().split('T')[0],
+            evaluacion: {
+                nota: datos.nota != null ? Number(datos.nota) : 5.0,
+                comentarios: datos.comentarios || 'Evaluación pedagógica satisfactoria'
+            }
+        };
+
+        const endpoints = [
+            'http://localhost:3000/api/v1/reports/visita-pdf',
+            'http://localhost:5001/api/v1/reports/visita-pdf',
+            `${API_BASE.replace('/api', '')}/api/v1/reports/visita-pdf`,
+            `${API_BASE}/v1/reports/visita-pdf`
+        ];
+
+        let blob = null;
+        let filename = `informe-visita-${payload.visita}-${Date.now()}.pdf`;
+
+        const token = getToken();
+        const headers = {
+            'Content-Type': 'application/json',
+            'Accept': 'application/pdf, application/json'
+        };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+
+        for (const ep of endpoints) {
+            try {
+                const res = await fetch(ep, {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify(payload)
+                });
+                if (res.ok) {
+                    const contentType = res.headers.get('content-type') || '';
+                    if (contentType.includes('application/pdf')) {
+                        blob = await res.blob();
+                        const cd = res.headers.get('content-disposition');
+                        if (cd && cd.includes('filename=')) {
+                            const match = cd.match(/filename="?([^";]+)"?/);
+                            if (match && match[1]) filename = match[1];
+                        }
+                        break;
+                    } else {
+                        const json = await res.json();
+                        if (json.reportUrl || json.url) {
+                            window.open(json.reportUrl || json.url, '_blank');
+                            await sigpaAlert('Informe Generado', 'El informe PDF ha sido generado y abierto en una nueva pestaña.', 'success');
+                            return;
+                        }
+                    }
+                }
+            } catch (errEp) {
+                // Siguiente endpoint
+            }
+        }
+
+        if (blob) {
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => {
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+            }, 1000);
+            await sigpaAlert('Descarga Completa', `El informe (${filename}) ha sido descargado correctamente.`, 'success');
+        } else {
+            await sigpaAlert('Aviso', 'No se pudo conectar con el microservicio de reportes para generar el PDF binario. Verifique que el servicio esté activo.', 'warning');
+        }
+    } catch (err) {
+        sigpaAlert('Error de Descarga', err.message, 'error');
+    }
+}
+
+async function descargarActaCierre(datos) {
+    try {
+        await sigpaAlert('Generando Acta', 'Validando prerrequisitos y emitiendo Acta de Cierre en PDF...', 'info');
+
+        const payload = {
+            id_asignacion: datos.idAsignacion || datos.id || 1,
+            estudiante: datos.estudiante || 'Estudiante UDI',
+            tutor: datos.tutor || 'Tutor UDI',
+            institucion: datos.institucion || 'Institución Educativa',
+            horas_cumplidas: datos.horasAcumuladas || datos.horas_cumplidas || 64,
+            total_horas_requeridas: datos.horasRequeridas || datos.horas_requeridas || 64,
+            bitacoras_pendientes: datos.bitacoras_pendientes || 0,
+            nota_final: datos.nota_final || 5.0,
+            fecha_cierre: new Date().toISOString().split('T')[0]
+        };
+
+        const endpoints = [
+            'http://localhost:3000/api/v1/reports/acta-cierre-pdf',
+            'http://localhost:5001/api/v1/reports/acta-cierre-pdf',
+            `${API_BASE.replace('/api', '')}/api/v1/reports/acta-cierre-pdf`,
+            `${API_BASE}/v1/reports/acta-cierre-pdf`
+        ];
+
+        let blob = null;
+        let filename = `acta-cierre-${payload.id_asignacion}.pdf`;
+
+        const token = getToken();
+        const headers = {
+            'Content-Type': 'application/json',
+            'Accept': 'application/pdf, application/json'
+        };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+
+        for (const ep of endpoints) {
+            try {
+                const res = await fetch(ep, {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify(payload)
+                });
+                if (res.ok) {
+                    const contentType = res.headers.get('content-type') || '';
+                    if (contentType.includes('application/pdf')) {
+                        blob = await res.blob();
+                        const cd = res.headers.get('content-disposition');
+                        if (cd && cd.includes('filename=')) {
+                            const match = cd.match(/filename="?([^";]+)"?/);
+                            if (match && match[1]) filename = match[1];
+                        }
+                        break;
+                    } else {
+                        const json = await res.json();
+                        if (json.reportUrl || json.url) {
+                            window.open(json.reportUrl || json.url, '_blank');
+                            await sigpaAlert('Acta Emitida', 'El Acta Final de Cierre ha sido generada y abierta.', 'success');
+                            return;
+                        }
+                    }
+                } else if (res.status === 400) {
+                    const errJson = await res.json();
+                    await sigpaAlert('Requisito No Cumplido', errJson.error || errJson.message || 'No se cumplen los prerrequisitos para el Acta de Cierre', 'warning');
+                    return;
+                }
+            } catch (errEp) {
+                // Siguiente endpoint
+            }
+        }
+
+        if (blob) {
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => {
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+            }, 1000);
+            await sigpaAlert('Descarga Completa', `El Acta de Cierre (${filename}) ha sido descargada exitosamente.`, 'success');
+        } else {
+            await sigpaAlert('Aviso', 'No se pudo generar el Acta de Cierre en PDF. Verifique la conexión con el microservicio de reportes.', 'warning');
+        }
+    } catch (err) {
+        sigpaAlert('Error de Descarga', err.message, 'error');
+    }
+}
+
+function abrirModalReportes(rol) {
+    const user = getCurrentUser();
+    const mc = document.getElementById('modalContainer');
+    mc.innerHTML = `
+    <div class="modal-overlay" onclick="closeModal(event)">
+        <div class="modal-content" onclick="event.stopPropagation()" style="max-width: 520px;">
+            <div class="modal-header">
+                <h3 class="modal-title">📑 Exportación de Informes y Actas Institucionales</h3>
+                <button class="btn-close" onclick="closeModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">
+                    Generación autónoma y descentralizada de documentos oficiales en formato PDF bajo los estándares de acreditación UDI.
+                </p>
+
+                <div style="display:flex;flex-direction:column;gap:12px;">
+                    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px;display:flex;justify-content:space-between;align-items:center;">
+                        <div>
+                            <strong style="font-size:13.5px;color:var(--text-main);display:block;">📄 Informe Formal de Visita (CU-13)</strong>
+                            <small class="text-muted">Informe pedagógico con rúbrica, asistencia y conceptos.</small>
+                        </div>
+                        <button type="button" class="btn-primary-sm" onclick="descargarReporteVisita({ visita: 1, estudiante: 'Estudiante Practicante', tutor: '${(user.nombre || 'Tutor UDI').replace(/'/g, "\\'")}', institucion: 'Colegio Piloto UDI' })">
+                            📥 Descargar
+                        </button>
+                    </div>
+
+                    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px;display:flex;justify-content:space-between;align-items:center;">
+                        <div>
+                            <strong style="font-size:13.5px;color:var(--text-main);display:block;">🎓 Acta Final de Cierre (CU-14 / CU-15)</strong>
+                            <small class="text-muted">Certificación de 100% de horas cumplidas y nota consolidada.</small>
+                        </div>
+                        <button type="button" class="btn-primary-sm" onclick="descargarActaCierre({ idAsignacion: 1, estudiante: 'Estudiante Practicante', tutor: '${(user.nombre || 'Tutor UDI').replace(/'/g, "\\'")}', institucion: 'Colegio Piloto UDI', horasAcumuladas: 64, horasRequeridas: 64, nota_final: 4.8 })">
+                            📥 Descargar
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary" onclick="closeModal()">Cerrar</button>
+            </div>
+        </div>
+    </div>`;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════

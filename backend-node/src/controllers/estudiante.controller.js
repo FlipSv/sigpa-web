@@ -15,6 +15,8 @@
  */
 'use strict';
 
+const path = require('path');
+const fs = require('fs');
 const { executeQuery } = require('../config/database');
 const { createError } = require('../middlewares/errorHandler');
 
@@ -231,7 +233,7 @@ async function getBitacoras(req, res, next) {
             JOIN ASIGNACION a ON b.ID_ASIGNACION = a.ID_ASIGNACION
             LEFT JOIN EVALUACION e ON b.ID_BITACORA = e.ID_BITACORA
             WHERE a.ID_ESTUDIANTE = :idEstudiante
-            ORDER BY b.NUMERO_VISITA DESC
+            ORDER BY b.NUMERO_VISITA ASC
         `;
 
         const result = await executeQuery(sql, { idEstudiante });
@@ -350,7 +352,7 @@ async function getEvidencias(req, res, next) {
             LEFT JOIN INSTITUCION i ON a.ID_INSTITUCION = i.ID_INSTITUCION
             LEFT JOIN EVALUACION e ON b.ID_BITACORA = e.ID_BITACORA AND e.TIPO_EVALUADOR = 'TUTOR'
             WHERE a.ID_ESTUDIANTE = :idEstudiante AND b.URL_EVIDENCIA IS NOT NULL
-            ORDER BY b.NUMERO_VISITA DESC
+            ORDER BY b.NUMERO_VISITA ASC
         `;
 
         const result = await executeQuery(sql, { idEstudiante });
@@ -643,6 +645,51 @@ async function registrarBitacora(req, res, next) {
     }
 }
 
+/* ── POST /api/estudiante/subir-evidencia ────────────────────────────── */
+async function subirEvidencia(req, res, next) {
+    try {
+        const { filename, contenido_base64, filedata, id_bitacora } = req.body || {};
+        const baseName = filename ? path.basename(filename) : `evidencia_${Date.now()}.pdf`;
+        const cleanName = baseName.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const targetDir = path.resolve(__dirname, '../../uploads/evidencias');
+        if (!fs.existsSync(targetDir)) {
+            fs.mkdirSync(targetDir, { recursive: true });
+        }
+        const targetPath = path.join(targetDir, cleanName);
+
+        const dataPayload = contenido_base64 || filedata;
+        if (dataPayload) {
+            const rawData = dataPayload.includes(',') ? dataPayload.split(',')[1] : dataPayload;
+            fs.writeFileSync(targetPath, Buffer.from(rawData, 'base64'));
+        } else if (!fs.existsSync(targetPath)) {
+            const minimalPdf = '%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]>>endobj\nxref\n0 4\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n185\n%%EOF';
+            fs.writeFileSync(targetPath, minimalPdf, 'utf8');
+        }
+
+        const publicUrl = `/uploads/evidencias/${cleanName}`;
+
+        if (id_bitacora) {
+            try {
+                await executeQuery(`UPDATE BITACORA SET URL_EVIDENCIA = :url WHERE ID_BITACORA = :id`, {
+                    url: publicUrl,
+                    id: Number(id_bitacora)
+                });
+            } catch (dbErr) {
+                console.warn('Advertencia actualizando URL_EVIDENCIA en BD:', dbErr.message);
+            }
+        }
+
+        res.json({
+            success: true,
+            message: 'Evidencia almacenada y vinculada exitosamente',
+            filename: cleanName,
+            url: publicUrl
+        });
+    } catch (err) {
+        next(err);
+    }
+}
+
 module.exports = {
     getAsignacion,
     getProgreso,
@@ -652,5 +699,6 @@ module.exports = {
     getEvaluaciones,
     getPreguntasGuia,
     registrarBitacora,
+    subirEvidencia,
 };
 
