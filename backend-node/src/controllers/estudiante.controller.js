@@ -150,43 +150,16 @@ async function getProgreso(req, res, next) {
 
         const totalSesiones = bitacoras.length;
         const totalHorasEnBitacoras = bitacoras.reduce((sum, b) => sum + Number(b.HORAS_SESION || 0), 0);
-        const ritmoPromedio = totalSesiones > 0 ? Math.round((totalHorasEnBitacoras / totalSesiones) * 10) / 10 : 16;
-        const sesionesRestantes = horasRestantes > 0 ? Math.ceil(horasRestantes / (ritmoPromedio || 16)) : 0;
+        const horasPendientes = bitacoras
+            .filter(b => b.ESTADO_REVISION === 'PENDIENTE')
+            .reduce((sum, b) => sum + Number(b.HORAS_SESION || 0), 0);
+        const horasAprobadas = bitacoras
+            .filter(b => b.ESTADO_REVISION === 'CALIFICADA' || b.ESTADO_REVISION === 'APROBADA')
+            .reduce((sum, b) => sum + Number(b.HORAS_SESION || 0), 0);
 
-        // Proyección temporal de fecha de culminación
-        let fechaBase = new Date();
-        if (bitacoras.length > 0) {
-            const ultimaBit = bitacoras[bitacoras.length - 1];
-            if (ultimaBit.FECHA_REGISTRO) {
-                const parsed = new Date(ultimaBit.FECHA_REGISTRO);
-                if (!isNaN(parsed.getTime())) fechaBase = parsed;
-            }
-        }
-
-        const diasEstimadosRestantes = sesionesRestantes * 7; // 1 sesión por semana
-        const fechaProyectada = new Date(fechaBase.getTime() + diasEstimadosRestantes * 24 * 60 * 60 * 1000);
-        const fechaEstimadaCulminacion = fechaProyectada.toISOString().split('T')[0];
-
-        // Lógica Semafórica Pedagógica
-        let semaforo = 'VERDE';
-        let semaforoEtiqueta = 'En Ritmo Óptimo';
-        let semaforoColor = '#10b981';
-        let semaforoMensaje = '¡Excelente ritmo! Estás cumpliendo tus horas pedagógicas dentro del cronograma previsto.';
-        let recomendacion = 'Continúa registrando tus bitácoras oportunamente con sus respectivas evidencias didácticas.';
-
-        if (pctCumplimiento < 30) {
-            semaforo = 'ROJO';
-            semaforoEtiqueta = 'Riesgo Crítico';
-            semaforoColor = '#ef4444';
-            semaforoMensaje = 'Atención requerida: Tu avance acumulado es menor al 30% de la meta pedagógica.';
-            recomendacion = 'Coordina de inmediato con tu tutor académico y programa sesiones intensivas en tu institución.';
-        } else if (pctCumplimiento < 65 || ritmoPromedio < 12) {
-            semaforo = 'AMARILLO';
-            semaforoEtiqueta = 'Ritmo Bajo';
-            semaforoColor = '#f59e0b';
-            semaforoMensaje = 'Ritmo moderado: Requiere incrementar la frecuencia o duración de las sesiones en aula.';
-            recomendacion = 'Se aconseja programar al menos 1 visita adicional semanal para culminar el periodo sin contratiempos.';
-        }
+        const horasValidadas = Math.max(horasAcumuladas, horasAprobadas);
+        const horasFaltantes = Math.max(0, horasRequeridas - horasValidadas);
+        const pctReal = horasRequeridas > 0 ? Math.min(100, Math.round((horasValidadas / horasRequeridas) * 100)) : 0;
 
         res.json({
             success: true,
@@ -197,21 +170,15 @@ async function getProgreso(req, res, next) {
                 semestre: asig.SEMESTRE,
                 institucion: asig.INSTITUCION || '',
                 tutor: (asig.TUTOR || '').trim(),
-                horasAcumuladas,
+                horasAcumuladas: horasValidadas,
+                horasAprobadas: horasValidadas,
+                horasPendientes,
                 horasRequeridas,
-                horasRestantes,
-                porcentaje: pctCumplimiento,
-                semaforo,
-                semaforoEtiqueta,
-                semaforoColor,
-                semaforoMensaje,
-                recomendacion,
-                ritmoPromedio,
+                horasRestantes: horasFaltantes,
+                porcentaje: pctReal,
                 sesionesRealizadas: totalSesiones,
-                sesionesEstimadasRestantes: sesionesRestantes,
+                totalBitacoras: totalSesiones,
                 fechaUltimaSesion: bitacoras.length > 0 ? (bitacoras[bitacoras.length - 1].FECHA_REGISTRO || '') : asig.FECHA_ASIGNACION || '',
-                fechaEstimadaCulminacion,
-                diasEstimadosRestantes,
             }
         });
     } catch (err) {
@@ -240,18 +207,35 @@ async function getBitacoras(req, res, next) {
 
         res.json({
             success: true,
-            data: result.rows.map(r => ({
-                id: r.ID_BITACORA,
-                visita: r.NUMERO_VISITA,
-                fecha: r.FECHA_REGISTRO || '',
-                horas: Number(r.HORAS_SESION || 0),
-                actividades: r.ACTIVIDADES || '',
-                observaciones: r.OBSERVACIONES || '',
-                evidencia: r.URL_EVIDENCIA || '',
-                estado: r.ESTADO_REVISION,
-                nota: r.NOTA != null ? Number(r.NOTA) : null,
-                comentariosEvaluacion: r.COMENTARIO_EVALUACION || '',
-            })),
+            data: result.rows.map(r => {
+                let planClase = '';
+                let evidencia = r.URL_EVIDENCIA || '';
+                if (evidencia && evidencia.includes('|')) {
+                    const parts = evidencia.split('|');
+                    planClase = parts[0] || '';
+                    evidencia = parts[1] || '';
+                }
+                const actStr = r.ACTIVIDADES || '';
+                const mPlan = actStr.match(/\[PLAN DE CLASE\]:\s*([^\n]+)/);
+                if (mPlan && !planClase) {
+                    planClase = mPlan[1].trim();
+                }
+
+                return {
+                    id: r.ID_BITACORA,
+                    sesion: r.NUMERO_VISITA,
+                    visita: r.NUMERO_VISITA,
+                    fecha: r.FECHA_REGISTRO || '',
+                    horas: Number(r.HORAS_SESION || 0),
+                    actividades: r.ACTIVIDADES || '',
+                    observaciones: r.OBSERVACIONES || '',
+                    planClase,
+                    evidencia,
+                    estado: r.ESTADO_REVISION,
+                    nota: r.NOTA != null ? Number(r.NOTA) : null,
+                    comentariosEvaluacion: r.COMENTARIO_EVALUACION || '',
+                };
+            }),
         });
     } catch (err) {
         next(err);
@@ -522,30 +506,34 @@ async function getPreguntasGuia(req, res, next) {
     }
 }
 
-/* ── POST /api/estudiante/bitacora (Asistente Guiado de Planeación) ─── */
+/* ── POST /api/estudiante/bitacora (Registro de Bitácora y Momentos) ─── */
 async function registrarBitacora(req, res, next) {
     try {
         const {
             id_asignacion,
             visita,
+            sesion,
             horas,
             fecha,
             actividades,
             observaciones,
             evidencia,
-            // Campos enriquecidos del Asistente Guiado Pedagógico
+            plan_clase,
+            acompanamiento_tutor,
+            // Momentos Pedagógicos
             inicio_motivacion,
             desarrollo,
             cierre_evaluacion,
             reflexion_docente,
         } = req.body;
 
-        if (!id_asignacion || !visita || !horas) {
-            throw createError(400, 'Faltan campos obligatorios en el registro de la bitácora (asignación, visita u horas)');
+        const numSesion = Number(sesion || visita);
+        if (!id_asignacion || !numSesion || !horas) {
+            throw createError(400, 'Faltan campos obligatorios en el registro de la bitácora (asignación, sesión u horas)');
         }
 
         const idAsignacion = Number(id_asignacion);
-        const numVisita = Number(visita);
+        const numVisita = numSesion;
         const numHoras = Number(horas);
 
         // Validación de horas: máximo 8 horas por jornada pedagógica
@@ -569,8 +557,14 @@ async function registrarBitacora(req, res, next) {
 
         // Construir contenido estructurado de actividades pedagógicas si vienen desglosadas
         let textoActividades = actividades || '';
-        if (inicio_motivacion || desarrollo || cierre_evaluacion) {
+        if (inicio_motivacion || desarrollo || cierre_evaluacion || plan_clase) {
             const partes = [];
+            if (plan_clase && String(plan_clase).trim()) {
+                partes.push(`[PLAN DE CLASE]: ${String(plan_clase).trim()}`);
+            }
+            if (acompanamiento_tutor && String(acompanamiento_tutor).trim() && acompanamiento_tutor !== 'NO' && acompanamiento_tutor !== '0') {
+                partes.push(`[ACOMPAÑAMIENTO DEL TUTOR]: ${String(acompanamiento_tutor).trim()}`);
+            }
             if (inicio_motivacion && inicio_motivacion.trim()) {
                 partes.push(`[FASE 1 - INICIO / MOTIVACIÓN]:\n${inicio_motivacion.trim()}`);
             }
@@ -590,25 +584,23 @@ async function registrarBitacora(req, res, next) {
         // Construir contenido estructurado de observaciones / reflexiones docentes
         let textoObservaciones = observaciones || '';
         if (reflexion_docente && reflexion_docente.trim()) {
-            textoObservaciones = `[REFLEXIÓN PEDAGÓGICA DOCENTE]:\n${reflexion_docente.trim()}` +
+            textoObservaciones = `[REFLEXIÓN PEDAGÓGICA]:\n${reflexion_docente.trim()}` +
                 (observaciones && observaciones.trim() ? `\n\n[OBSERVACIONES ADICIONALES]:\n${observaciones.trim()}` : '');
         }
 
-        // Validación normativa para Semestres 5 y 6
-        const checkSql = `
-            SELECT p.SEMESTRE, p.TIPO
-            FROM ASIGNACION a
-            JOIN PRACTICA p ON a.ID_PRACTICA = p.ID_PRACTICA
-            WHERE a.ID_ASIGNACION = :idAsignacion
-        `;
-        const asigRes = await executeQuery(checkSql, { idAsignacion });
-        const asigRow = asigRes.rows && asigRes.rows.length > 0 ? asigRes.rows[0] : null;
+        // Determinar URL_EVIDENCIA combinando plan de clase y evidencia si ambos existen
+        let urlEvidencia = evidencia && String(evidencia).trim() ? String(evidencia).trim() : '';
+        let urlPlan = plan_clase && String(plan_clase).trim() ? String(plan_clase).trim() : '';
+        let urlFinal = '';
 
-        if (asigRow) {
-            const sem = asigRow.SEMESTRE;
-            if ((sem === 5 || sem === 6) && (!evidencia || !String(evidencia).trim())) {
-                throw createError(400, 'Requisito normativo: Las prácticas 5 y 6 exigen adjuntar soporte de evidencia en formato PDF o enlace de portafolio (Formatos P5/P6)');
-            }
+        if (urlPlan && urlEvidencia && urlPlan !== urlEvidencia) {
+            urlFinal = `${urlPlan}|${urlEvidencia}`;
+        } else if (urlEvidencia) {
+            urlFinal = urlEvidencia;
+        } else if (urlPlan) {
+            urlFinal = urlPlan;
+        } else {
+            urlFinal = `sesion_${numSesion}_evidencia.pdf`;
         }
 
         const bindParams = {
@@ -617,7 +609,7 @@ async function registrarBitacora(req, res, next) {
             numHoras,
             actividades: textoActividades,
             observaciones: textoObservaciones,
-            evidencia: evidencia && String(evidencia).trim() ? String(evidencia).trim() : `evidencia_visita_${numVisita}.pdf`,
+            evidencia: urlFinal,
         };
 
         let insertSql;
@@ -638,7 +630,7 @@ async function registrarBitacora(req, res, next) {
 
         res.json({
             success: true,
-            message: 'Bitácora y diario de campo pedagógico registrados con éxito y enviados a revisión del tutor',
+            message: 'Bitácora registrada con éxito y enviada a revisión del tutor',
         });
     } catch (err) {
         next(err);
