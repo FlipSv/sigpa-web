@@ -25,27 +25,22 @@
             padding: 0;
         }
 
-        html,
-        body {
-            height: 100%;
-        }
-
         body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background-color: #f8fafc;
             color: #1e293b;
             -webkit-font-smoothing: antialiased;
             min-height: 100vh;
-            display: flex;
-            flex-direction: column;
+            min-height: 100dvh;
         }
 
         /* ── Split Layout Container ─────────────────────────────── */
         .split-container {
             display: flex;
             min-height: 100vh;
+            min-height: 100dvh;
             width: 100%;
-            overflow: hidden;
+            overflow-x: clip;
             position: relative;
         }
 
@@ -62,6 +57,7 @@
             padding: 52px 64px;
             position: relative;
             z-index: 5;
+            min-width: 0;
         }
 
         /* Sutil resplandor con paleta institucional UDI (Azul Profundo & Naranja) */
@@ -286,6 +282,7 @@
            ══════════════════════════════════════════════════════════ */
         .form-side {
             flex: 1 1 52%;
+            min-width: 0;
             background: #ffffff;
             display: flex;
             flex-direction: column;
@@ -337,7 +334,7 @@
             border: 1px solid #e2e8f0;
             box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
             border-radius: 12px;
-            width: 260px;
+            width: min(260px, calc(100vw - 32px));
             padding: 8px;
             display: none;
             z-index: 50;
@@ -650,65 +647,39 @@
             }
         }
 
-        /* ── Mobile Hamburger Navigation ────────────────────────── */
-        .mobile-nav-toggle {
-            display: none;
-            align-items: center;
-            justify-content: center;
-            background: #ffffff;
-            border: 1px solid #cbd5e1;
-            border-radius: 8px;
-            padding: 8px;
-            cursor: pointer;
-            color: #1e293b;
-            transition: all 0.2s ease;
-        }
-
-        .mobile-nav-toggle:hover {
-            background: #f1f5f9;
-            border-color: #3b82f6;
-        }
-
-        @media (max-width: 640px) {
-            .mobile-nav-toggle {
-                display: inline-flex;
-            }
-            .form-top-bar {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                width: 100%;
-            }
-            .brand-side {
-                padding: 24px 16px;
-            }
-            .form-side {
-                padding: 24px 16px;
-            }
-        }
-
-        @media (max-width: 860px) {
+        @media (max-width: 1000px) {
             .split-container {
                 flex-direction: column;
             }
 
             .brand-side {
                 flex: none;
-                padding: 36px 24px;
+                overflow: hidden;
+                padding: 20px clamp(16px, 4vw, 32px);
             }
 
             .brand-side::after {
-                top: auto;
-                bottom: -30px;
-                right: 0;
-                left: 0;
-                width: 100%;
-                height: 30px;
-                background: linear-gradient(to bottom, rgba(13, 34, 71, 0.45) 0%, rgba(13, 34, 71, 0) 100%);
+                display: none;
             }
 
-            .brand-body {
-                margin: 24px 0;
+            .brand-header {
+                flex-direction: row;
+                align-items: center;
+                gap: 12px;
+            }
+
+            .brand-udi-logo-container {
+                flex: 0 0 64px;
+            }
+
+            .brand-udi-logo {
+                padding: 4px;
+                border-radius: 8px;
+            }
+
+            .brand-system-name {
+                flex-wrap: wrap;
+                gap: 4px 8px;
             }
 
             /* ── SweetAlert2 UDI Estilos ── */
@@ -758,17 +729,25 @@
                 background: linear-gradient(135deg, #163e7c 0%, #2563eb 100%) !important;
             }
 
-            .brand-title {
-                font-size: 24px;
-            }
-
-            .brand-features {
+            .brand-body,
+            .brand-footer {
                 display: none;
             }
 
             .form-side {
                 flex: 1;
-                padding: 36px 24px;
+                padding: 20px clamp(16px, 4vw, 32px) max(24px, env(safe-area-inset-bottom));
+            }
+        }
+
+        @media (max-width: 480px) {
+            .input-wrapper input {
+                font-size: 16px;
+            }
+
+            .demo-badge-btn,
+            .demo-option {
+                min-height: 44px;
             }
         }
 
@@ -1020,7 +999,7 @@
                     </div>
 
                     <!-- Botón de Acceso Principal -->
-                    <button type="submit" class="btn-submit" id="btnSubmit">
+                    <button type="submit" class="btn-submit" id="btnSubmit" autocomplete="off">
                         <span>Acceder al Sistema</span>
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                             stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
@@ -1177,6 +1156,12 @@
         }
 
         /* ── Login Submit Handler ────────────────────── */
+        function setLoginPending(pending) {
+            const btn = document.getElementById('btnSubmit');
+            btn.disabled = pending;
+            btn.querySelector('span').textContent = pending ? 'Verificando credenciales...' : 'Acceder al Sistema';
+        }
+
         async function handleLogin(e) {
             e.preventDefault();
             const email = document.getElementById('email').value.trim();
@@ -1184,6 +1169,7 @@
             const msg = document.getElementById('loginMsg');
             const btn = document.getElementById('btnSubmit');
 
+            if (btn.disabled) return;
             msg.style.display = 'none';
 
             if (!email || !contrasena) {
@@ -1193,8 +1179,7 @@
                 return;
             }
 
-            btn.disabled = true;
-            btn.innerHTML = `<span>Verificando credenciales...</span>`;
+            setLoginPending(true);
 
             try {
                 const res = await fetch('/api/login', {
@@ -1203,36 +1188,27 @@
                     body: JSON.stringify({ email, contrasena })
                 });
                 const data = await res.json();
-                if (data.success) {
-                    if (data.token) {
-                        sessionStorage.setItem('sigpa_token', data.token);
-                        localStorage.setItem('sigpa_token', data.token);
-                    }
+                if (res.ok && data.success && data.token && data.usuario) {
+                    sessionStorage.setItem('sigpa_token', data.token);
+                    localStorage.setItem('sigpa_token', data.token);
                     sessionStorage.setItem('sigpa_user', JSON.stringify(data.usuario));
                     localStorage.setItem('sigpa_user', JSON.stringify(data.usuario));
-                    btn.innerHTML = '<span>✓ Acceso Concedido</span>';
-                    setTimeout(() => { window.location.href = 'dashboard.html'; }, 300);
+                    window.location.replace('dashboard.html');
                 } else {
                     msg.textContent = data.message || 'Credenciales inválidas o usuario no habilitado.';
                     msg.className = 'auth-alert error';
                     msg.style.display = 'block';
-                    btn.disabled = false;
-                    btn.innerHTML = `<span>Acceder al Sistema</span>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>
-                    </svg>`;
                 }
             } catch (err) {
                 msg.textContent = 'No se pudo conectar al servidor de autenticación. Verifica que el backend esté en ejecución.';
                 msg.className = 'auth-alert error';
                 msg.style.display = 'block';
-                btn.disabled = false;
-                btn.innerHTML = `<span>Acceder al Sistema</span>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>
-                </svg>`;
+            } finally {
+                setLoginPending(false);
             }
         }
+
+        window.addEventListener('pageshow', () => setLoginPending(false));
 
         document.addEventListener('DOMContentLoaded', () => {
             if (window.location.search.includes('session_expired=1')) {

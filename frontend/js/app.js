@@ -325,7 +325,7 @@ function logout() {
     sessionStorage.removeItem('sigpa_user');
     localStorage.removeItem('sigpa_token');
     localStorage.removeItem('sigpa_user');
-    window.location.href = 'index.html';
+    window.location.replace('index.html');
 }
 
 function getToken() {
@@ -377,7 +377,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!window.location.pathname.includes('dashboard.html')) return;
 
     const user = getCurrentUser();
-    if (!user) { window.location.href = 'index.html'; return; }
+    if (!user || !getToken()) { window.location.replace('index.html'); return; }
 
     const rol = (user.rol || '').toUpperCase();
 
@@ -424,7 +424,38 @@ document.addEventListener('DOMContentLoaded', () => {
     if (rol !== 'DIRECTOR') document.getElementById('notifDot').style.display = 'block';
 
     setupRoleNav(user);
+    setupResponsiveSidebar();
 });
+
+function setupResponsiveSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const toggle = document.getElementById('sidebarToggle');
+    const close = document.getElementById('sidebarClose');
+    const backdrop = document.getElementById('sidebarBackdrop');
+    const main = document.querySelector('.main-wrapper');
+    const narrow = window.matchMedia('(max-width: 900px)');
+
+    function setOpen(open, restoreFocus = true) {
+        sidebar.classList.toggle('is-open', open);
+        backdrop.hidden = !open;
+        main.inert = open;
+        document.body.classList.toggle('sidebar-open', open);
+        toggle.setAttribute('aria-expanded', String(open));
+        if (open) close.focus();
+        else if (restoreFocus && narrow.matches) toggle.focus();
+    }
+
+    toggle.addEventListener('click', () => setOpen(true));
+    close.addEventListener('click', () => setOpen(false));
+    backdrop.addEventListener('click', () => setOpen(false));
+    sidebar.addEventListener('click', event => {
+        if (narrow.matches && event.target.closest('.nav-item')) setOpen(false);
+    });
+    document.addEventListener('keydown', event => {
+        if (event.key === 'Escape' && !backdrop.hidden) setOpen(false);
+    });
+    narrow.addEventListener('change', () => setOpen(false, !backdrop.hidden));
+}
 
 /* ═══════════════════════════════════════════════════════════════════════
    SIDEBAR NAVIGATION — per role
@@ -451,6 +482,22 @@ function setupRoleNav(user) {
     const nav = document.getElementById('sidebarNav');
     const rol = (user.rol || '').toUpperCase();
 
+    if (['DIRECTOR', 'TUTOR', 'COORDINADOR'].includes(rol)) {
+        const campana = document.getElementById('btn-notifs');
+        if (campana) {
+            campana.setAttribute('role', 'button');
+            campana.setAttribute('aria-label', 'Notificaciones');
+            campana.tabIndex = 0;
+            campana.onclick = () => mostrarNotificacionesAcademicas(rol);
+            campana.onkeydown = event => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    campana.click();
+                }
+            };
+        }
+    }
+
     if (rol === 'DIRECTOR') {
         nav.innerHTML = `
             ${navLabel('GENERAL')}
@@ -459,10 +506,8 @@ function setupRoleNav(user) {
             ${navItem('📚', 'Prácticas Pedagógicas', "loadDirectorView('practicas', event.currentTarget)")}
             ${navItem('🏫', 'Instituciones & Convenios',"loadDirectorView('instituciones', event.currentTarget)")}
             ${navItem('👥', 'Asignaciones & Cupos',  "loadDirectorView('asignaciones', event.currentTarget)")}
-            ${navLabel('ADMINISTRACIÓN')}
-            ${navItem('👤', 'Gestión de Cuentas',    "loadDirectorView('usuarios', event.currentTarget)")}
             ${navLabel('REPORTES')}
-            ${navItem('📥', 'Exportar Informes',     "abrirModalReportes('DIRECTOR')")}
+            ${navItem('📥', 'Exportar Informes', "loadDirectorView('informes', event.currentTarget)")}
         `;
         setActive(nav.querySelectorAll('.nav-item')[0]);
         setTopbarCTA('➕', 'Nueva Práctica', "openModalNuevaPractica()");
@@ -485,15 +530,10 @@ function setupRoleNav(user) {
     } else if (rol === 'TUTOR' || rol === 'COORDINADOR') {
         nav.innerHTML = `
             ${navLabel('SEGUIMIENTO')}
-            ${navItem('📝', 'Bitácoras por Revisar',  "loadTutorView('bitacoras', event.currentTarget)")}
+            ${navItem('📝', 'Bitácoras',  "loadTutorView('bitacoras', event.currentTarget)")}
             ${navItem('👥', 'Mis Practicantes',       "loadTutorView('estudiantes', event.currentTarget)")}
-            ${navLabel('EVALUACIÓN')}
-            ${navItem('📊', 'Estadísticas del Grupo', "loadTutorView('bitacoras', event.currentTarget)")}
-            ${navLabel('REPORTES')}
-            ${navItem('📄', 'Informes & Actas PDF',   "abrirModalReportes('TUTOR')")}
         `;
         setActive(nav.querySelectorAll('.nav-item')[0]);
-        setTopbarCTA('📅', 'Agendar Visita', "sigpaAlert('Agenda de Visitas', 'El módulo de agendamiento de visitas de supervisión se encuentra en fase de despliegue.', 'info')");
         loadTutorView('bitacoras');
 
     } else if (rol === 'ASESOR') {
@@ -611,12 +651,11 @@ async function loadDirectorView(tab, btn) {
     if (tab === 'kpis') {
         main.innerHTML = loadingState();
         try {
-            const [kpiRes, pracRes] = await Promise.all([
-                fetch(`${API_BASE}/director/kpis`).then(r => r.json()),
-                fetch(`${API_BASE}/director/estado`).then(r => r.json()),
+            const [kpi, practicas, asigs] = await Promise.all([
+                leerDatosAcademicos('/director/kpis'),
+                leerDatosAcademicos('/director/practicas'),
+                leerDatosAcademicos('/director/asignaciones'),
             ]);
-            const kpi      = (kpiRes && (kpiRes.data || kpiRes)) || {};
-            const practicas = (pracRes && pracRes.data) || [];
 
             /* ── KPI Calculation ── */
             const totalEst   = kpi.totalEstudiantes || kpi.estudiantes || 0;
@@ -624,25 +663,18 @@ async function loadDirectorView(tab, btn) {
             const convenios  = kpi.conveniosActivos || kpi.convenios || 0;
             const cupos      = kpi.cuposDisponibles || kpi.cupos || 0;
 
-            /* ── Agrupaciones para gráficos ── */
-            const abiertas  = practicas.filter(p => p.estado === 'ABIERTA').length;
-            const cerradas  = practicas.filter(p => p.estado === 'CERRADA').length;
-            const conEst    = practicas.reduce((s, p) => s + (p.totalEstudiantes || 0), 0);
-
             /* ── Estado de practicantes para donut ── */
-            const asigRes   = await fetch(`${API_BASE}/director/asignaciones`).then(r => r.json());
-            const asigs     = (asigRes && asigRes.data) || [];
-            const enEjec    = asigs.filter(a => a.estado === 'APROBADA').length;
-            const enPend    = asigs.filter(a => a.estado !== 'APROBADA').length;
-            const totalAsig = asigs.length || 1;
+            const enEjec    = asigs.filter(a => a.aprobacion === 'APROBADA').length;
+            const enPend    = asigs.filter(a => a.aprobacion === 'PENDIENTE').length;
+            const totalAsig = asigs.length;
 
             main.innerHTML = `
             <!-- KPI Row -->
             <div class="kpi-row">
-                ${kpiCard('kpi-accent','kpi-icon-accent','👥','Estudiantes Activos', totalEst, 'En prácticas pedagógicas', 8, .05)}
-                ${kpiCard('kpi-success','kpi-icon-success','⏱️','Horas Validadas', `${totalHrs} hrs`, 'Certificadas por tutores', 12, .10)}
-                ${kpiCard('kpi-teal','kpi-icon-teal','📜','Convenios Vigentes', convenios, 'Instituciones receptoras', 0, .15)}
-                ${kpiCard('kpi-warning','kpi-icon-warning','🪑','Cupos Disponibles', cupos, 'Capacidad total autorizada', null, .20)}
+                ${kpiCard('kpi-accent','kpi-icon-accent','👥','Estudiantes Activos', totalEst, 'Cuentas activas', null, .05)}
+                ${kpiCard('kpi-success','kpi-icon-success','⏱️','Horas Validadas', `${totalHrs} hrs`, 'Certificadas por tutores', null, .10)}
+                ${kpiCard('kpi-teal','kpi-icon-teal','📜','Convenios Vigentes', convenios, 'Instituciones receptoras', null, .15)}
+                ${kpiCard('kpi-warning','kpi-icon-warning','🪑','Cupos Disponibles', cupos, 'En instituciones con convenio vigente', null, .20)}
             </div>
 
             <!-- Quick Actions -->
@@ -651,34 +683,11 @@ async function loadDirectorView(tab, btn) {
                 <button class="btn-primary-sm" onclick="openModalNuevaPractica()">➕ Nueva Práctica</button>
                 <button class="btn-secondary" onclick="loadDirectorView('instituciones')">🏫 Registrar Institución</button>
                 <button class="btn-secondary" onclick="openModalAsignarEstudiante()">👤 Asignar Estudiante</button>
-                <button class="btn-secondary" onclick="sigpaAlert('Informe de Acreditación', 'Generando consolidado de evidencias y métricas institucionales para acreditación CNA...', 'info')">📥 Informe de Acreditación</button>
+                <button class="btn-secondary" onclick="loadDirectorView('informes')">📥 Exportar Informes</button>
             </div>
 
             <!-- Charts Row -->
-            <div class="chart-row-2col">
-                <!-- Main Chart: Prácticas por tipo y estado -->
-                <div class="chart-card">
-                    <div class="chart-card-header">
-                        <div>
-                            <div class="chart-card-title">Distribución de Prácticas Pedagógicas</div>
-                            <div class="chart-card-subtitle">Horas requeridas por semestre · ${practicas.length} prácticas catalogadas</div>
-                        </div>
-                        <div class="chart-meta">
-                            <div class="chart-meta-val">${abiertas}</div>
-                            <span class="status-badge status-open" style="margin-left:6px;">Abiertas</span>
-                        </div>
-                    </div>
-                    <div class="chart-card-body">
-                        <div class="chart-legend">
-                            <div class="legend-item"><div class="legend-dot" style="background:#4f46e5"></div>Horas requeridas</div>
-                            <div class="legend-item"><div class="legend-dot" style="background:#10b981"></div>Estudiantes asignados</div>
-                        </div>
-                        <div style="position:relative;height:220px;">
-                            <canvas id="chartDirectorMain"></canvas>
-                        </div>
-                    </div>
-                </div>
-
+            <div style="margin-bottom:20px;">
                 <!-- Secondary Chart: Ocupación por práctica -->
                 <div class="chart-card">
                     <div class="chart-card-header">
@@ -705,9 +714,9 @@ async function loadDirectorView(tab, btn) {
                     </div>
                     <div class="donut-wrapper">
                         ${donutSVG([
-                            { color: '#10b981', pct: Math.round((enEjec / totalAsig) * 100) },
-                            { color: '#f59e0b', pct: Math.round((enPend / totalAsig) * 100) },
-                            { color: '#e2e8f0', pct: Math.max(0, 100 - Math.round(((enEjec + enPend) / totalAsig) * 100)) },
+                            { color: '#10b981', pct: totalAsig ? Math.round(enEjec * 100 / totalAsig) : 0 },
+                            { color: '#f59e0b', pct: totalAsig ? Math.round(enPend * 100 / totalAsig) : 0 },
+                            { color: '#e2e8f0', pct: totalAsig ? Math.round((totalAsig - enEjec - enPend) * 100 / totalAsig) : 0 },
                         ], 140)}
                     </div>
                     <div class="donut-legend">
@@ -720,8 +729,8 @@ async function loadDirectorView(tab, btn) {
                             <span class="donut-legend-pct">${enPend}</span>
                         </div>
                         <div class="donut-legend-item">
-                            <div class="donut-legend-label"><div class="donut-legend-dot" style="background:#e2e8f0"></div>Sin asignar</div>
-                            <span class="donut-legend-pct">${Math.max(0, cupos - totalAsig)}</span>
+                            <div class="donut-legend-label"><div class="donut-legend-dot" style="background:#e2e8f0"></div>Otras</div>
+                            <span class="donut-legend-pct">${totalAsig - enEjec - enPend}</span>
                         </div>
                     </div>
                 </div>
@@ -751,8 +760,8 @@ async function loadDirectorView(tab, btn) {
                                 ${practicas.slice(0, 6).map(p => `
                                 <tr>
                                     <td><span class="status-badge status-brand">Sem ${p.semestre}</span></td>
-                                    <td><strong style="font-size:13px;">${p.nombre}</strong><br>
-                                        <small class="text-muted">${p.tipo}</small></td>
+                                    <td><strong style="font-size:13px;">${escaparAcademico(p.nombre)}</strong><br>
+                                        <small class="text-muted">${escaparAcademico(p.institucion || p.tipo)}</small></td>
                                     <td><strong>${p.horas}</strong> hrs</td>
                                     <td><strong>${p.totalEstudiantes || 0}</strong> asignados</td>
                                     <td><span class="status-badge ${p.estado === 'ABIERTA' ? 'status-open' : 'status-closed'}">${p.estado}</span></td>
@@ -770,7 +779,7 @@ async function loadDirectorView(tab, btn) {
             </div>`;
 
             /* ── Render Charts ── */
-            _renderDirectorCharts(practicas, asigs);
+            _renderDirectorCharts(asigs);
 
         } catch (err) {
             main.innerHTML = errorState('Error al cargar el panel: ' + err.message);
@@ -779,8 +788,7 @@ async function loadDirectorView(tab, btn) {
     } else if (tab === 'practicas') {
         main.innerHTML = loadingState();
         try {
-            const res = await fetch(`${API_BASE}/director/estado`);
-            const practicas = (await res.json()).data || [];
+            const practicas = await leerDatosAcademicos('/director/practicas');
             main.innerHTML = `
             <div class="card">
                 <div class="card-header">
@@ -790,15 +798,15 @@ async function loadDirectorView(tab, btn) {
                 <div class="card-body table-responsive">
                     <table class="data-table">
                         <thead><tr>
-                            <th>Semestre</th><th>Nombre de la Práctica</th><th>Tipo</th>
+                            <th>Semestre</th><th>Nombre de la Práctica</th><th>Modalidad</th>
                             <th>Horas</th><th>Practicantes</th><th>Estado</th><th>Acción</th>
                         </tr></thead>
                         <tbody>
                             ${practicas.map(p => `
                             <tr>
                                 <td><span class="status-badge status-brand">Sem ${p.semestre}</span></td>
-                                <td><strong>${p.nombre}</strong></td>
-                                <td><span class="status-badge ${p.tipo === 'OBSERVACION' ? 'status-graded' : 'status-open'}">${p.tipo}</span></td>
+                                <td><strong>${escaparAcademico(p.nombre)}</strong><br><small class="text-muted">${escaparAcademico(p.institucion)}</small></td>
+                                <td><span class="status-badge ${p.tipo === 'OBSERVACION' ? 'status-graded' : 'status-open'}">${escaparAcademico(p.tipo)}</span></td>
                                 <td>${p.horas} hrs</td>
                                 <td><strong>${p.totalEstudiantes}</strong></td>
                                 <td><span class="status-badge ${p.estado === 'ABIERTA' ? 'status-open' : 'status-closed'}">${p.estado}</span></td>
@@ -841,8 +849,8 @@ async function loadDirectorView(tab, btn) {
                                 <tr>
                                     <td><strong>${i.nombre}</strong></td>
                                     <td>${i.direccion}<br><small class="text-muted">📞 ${i.telefono}</small></td>
-                                    <td><span class="status-badge ${i.convenioActivo === 'S' ? 'status-open' : 'status-closed'}">
-                                        ${i.convenioActivo === 'S' ? 'ACTIVO' : 'VENCIDO'}</span></td>
+                                    <td><span class="status-badge ${i.vigente ? 'status-open' : 'status-closed'}">
+                                        ${i.vigente ? 'VIGENTE' : 'SIN VIGENCIA'}</span></td>
                                     <td>
                                         <div class="progress-with-label">
                                             <div class="progress-label-row">
@@ -868,8 +876,7 @@ async function loadDirectorView(tab, btn) {
     } else if (tab === 'asignaciones') {
         main.innerHTML = loadingState();
         try {
-            const res   = await fetch(`${API_BASE}/director/asignaciones`);
-            const asigs = (await res.json()).data || [];
+            const asigs = await leerDatosAcademicos('/director/asignaciones');
             main.innerHTML = `
             <div class="card">
                 <div class="card-header">
@@ -880,24 +887,21 @@ async function loadDirectorView(tab, btn) {
                     <table class="data-table">
                         <thead><tr>
                             <th>Estudiante</th><th>Práctica</th><th>Institución</th>
-                            <th>Tutor</th><th>Progreso de Horas</th><th>Estado</th><th>Acciones</th>
+                            <th>Tutor</th><th>Progreso de Horas</th><th>Estado</th><th>Aprobación</th>
                         </tr></thead>
                         <tbody>
                             ${asigs.map(a => `
                             <tr>
-                                <td><strong>${a.estudiante}</strong></td>
-                                <td>${a.practica}</td>
-                                <td>${a.institucion || '<span class="text-muted">Sin asignar</span>'}</td>
-                                <td>${a.tutor || '<span class="text-muted">Sin tutor</span>'}</td>
+                                <td><strong>${escaparAcademico(a.estudiante)}</strong></td>
+                                <td>${escaparAcademico(a.practica)}</td>
+                                <td>${escaparAcademico(a.institucion || 'Sin asignar')}</td>
+                                <td>${escaparAcademico(a.tutor || 'Sin tutor')}</td>
                                 <td>${progressBarCell(a.horasAcumuladas, a.horasRequeridas)}</td>
-                                <td><span class="status-badge ${a.estado === 'APROBADA' || a.estado === 'CERRADA' ? 'status-open' : 'status-pending'}">${a.estado}</span></td>
-                                <td>
-                                    <button class="btn-primary-sm" style="font-size:11.5px;padding:4px 8px;"
-                                        onclick="descargarActaCierre({ idAsignacion: ${a.id}, estudiante: '${a.estudiante.replace(/'/g, "\\'")}', tutor: '${(a.tutor || '').replace(/'/g, "\\'")}', institucion: '${(a.institucion || '').replace(/'/g, "\\'")}', horasAcumuladas: ${a.horasAcumuladas}, horasRequeridas: ${a.horasRequeridas} })"
-                                        title="Generar y descargar Acta de Cierre en PDF">
-                                        📄 Acta PDF
-                                    </button>
-                                </td>
+                                <td><span class="status-badge ${a.estado === 'EN_CURSO' ? 'status-open' : 'status-pending'}">${a.estado}</span></td>
+                                <td>${a.aprobacion === 'PENDIENTE' ? `
+                                    <button class="btn-success-sm" onclick="resolverAsignacion(${a.id}, 'APROBADA')">Aprobar</button>
+                                    <button class="btn-warning-sm" onclick="resolverAsignacion(${a.id}, 'RECHAZADA')">Rechazar</button>
+                                ` : escaparAcademico(a.aprobacion || '?')}</td>
                             </tr>`).join('')}
                         </tbody>
                     </table>
@@ -907,127 +911,40 @@ async function loadDirectorView(tab, btn) {
             main.innerHTML = errorState('Error al cargar asignaciones: ' + e.message);
         }
 
-    } else if (tab === 'usuarios') {
+    } else if (tab === 'informes') {
         main.innerHTML = loadingState();
         try {
-            const res = await fetch(`${API_BASE}/director/usuarios`);
-            const usuarios = (await res.json()).data || [];
-
-            const totalDirectores  = usuarios.filter(u => u.rol === 'DIRECTOR').length;
-            const totalTutores     = usuarios.filter(u => u.rol === 'TUTOR').length;
-            const totalAsesores    = usuarios.filter(u => u.rol === 'ASESOR').length;
-            const totalEstudiantes = usuarios.filter(u => u.rol === 'ESTUDIANTE').length;
-
-            const roleBadges = {
-                DIRECTOR:   '<span class="status-badge status-brand">👔 Director</span>',
-                TUTOR:      '<span class="status-badge status-open">🎓 Tutor</span>',
-                ASESOR:     '<span class="status-badge status-graded">🏫 Asesor In Situ</span>',
-                ESTUDIANTE: '<span class="status-badge status-pending">🎒 Estudiante</span>',
-            };
-
+            const practicas = (await leerDatosAcademicos('/director/practicas')).filter(p => p.estado === 'ABIERTA');
             main.innerHTML = `
-            <!-- KPI Resumen de Cuentas -->
-            <div class="kpi-row" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 20px;">
-                ${kpiCard('kpi-accent','kpi-icon-accent','👔','Directores', totalDirectores, 'Gestión de programa', null, .05)}
-                ${kpiCard('kpi-teal','kpi-icon-teal','🎓','Tutores', totalTutores, 'Docentes evaluadores', null, .10)}
-                ${kpiCard('kpi-purple','kpi-icon-purple','🏫','Asesores', totalAsesores, 'Acompañamiento in situ', null, .15)}
-                ${kpiCard('kpi-success','kpi-icon-success','🎒','Estudiantes', totalEstudiantes, 'Practicantes activos', null, .20)}
-            </div>
-
-            <!-- Tabla de Usuarios -->
-            <div class="card">
-                <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;">
-                    <div>
-                        <h3 class="card-title">Directorio de Usuarios y Control de Acceso (RBAC)</h3>
-                        <small class="text-muted">Cuentas creadas y administradas centralizadamente en Oracle 10g</small>
+                <div class="card">
+                    <div class="card-header"><h3 class="card-title">Informe de Prácticas Disponibles</h3></div>
+                    <div class="card-body">
+                        ${practicas.length ? `
+                            <form onsubmit="mostrarInformePractica(event)">
+                                <label for="m-informe-practica">Práctica</label>
+                                <select id="m-informe-practica" name="practica" required onchange="limpiarInformePractica()">
+                                    <option value="">Seleccione una práctica</option>
+                                    ${practicas.map(p => optionAcademica(p.id, `${p.nombre} · ${p.institucion || `Semestre ${p.semestre}`}`)).join('')}
+                                </select>
+                                <button class="btn-primary-sm" type="submit">Consultar</button>
+                            </form>` : '<p>No hay prácticas abiertas.</p>'}
+                        <div id="resultadoInformePractica"></div>
                     </div>
-                    <button class="btn-primary-sm" onclick="openModalNuevoUsuario()">➕ Crear Nueva Cuenta</button>
-                </div>
-                <div class="card-body table-responsive">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>ID</th>
-                                <th>Nombre Completo</th>
-                                <th>Correo Institucional</th>
-                                <th>Rol en SIGPA</th>
-                                <th>Estado</th>
-                                <th>Acciones</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${usuarios.map(u => `
-                            <tr>
-                                <td><span class="status-badge status-brand">#${u.id}</span></td>
-                                <td><strong>${u.nombre}</strong></td>
-                                <td><code>${u.email}</code></td>
-                                <td>${roleBadges[u.rol] || u.rol}</td>
-                                <td>
-                                    <span class="status-badge ${u.activo === 'S' ? 'status-open' : 'status-closed'}">
-                                        ${u.activo === 'S' ? '● ACTIVO' : '○ INACTIVO'}
-                                    </span>
-                                </td>
-                                <td>
-                                    <button class="btn-${u.activo === 'S' ? 'warning' : 'success'}-sm" style="padding:4px 10px;font-size:11.5px;"
-                                        onclick="cambiarEstadoUsuario(${u.id}, '${u.activo === 'S' ? 'N' : 'S'}')">
-                                        ${u.activo === 'S' ? 'Desactivar' : 'Activar'}
-                                    </button>
-                                </td>
-                            </tr>`).join('')}
-                        </tbody>
-                    </table>
-                </div>
-            </div>`;
+                </div>`;
         } catch (e) {
-            main.innerHTML = errorState('Error al cargar directorio de usuarios: ' + e.message);
+            main.innerHTML = errorState(e.message);
         }
     }
 }
 
-function _renderDirectorCharts(practicas, asigs) {
-    /* Chart 1: Horizontal Bar — horas y estudiantes por práctica */
-    destroyChart('dirMain');
-    const ctxMain = document.getElementById('chartDirectorMain');
-    if (ctxMain) {
-        const labels = practicas.map(p => `S${p.semestre}`);
-        _charts['dirMain'] = new Chart(ctxMain, {
-            type: 'bar',
-            data: {
-                labels,
-                datasets: [
-                    {
-                        label: 'Horas requeridas',
-                        data: practicas.map(p => p.horas),
-                        backgroundColor: 'rgba(79,70,229,.85)',
-                        borderRadius: 6,
-                        borderSkipped: false,
-                    },
-                    {
-                        label: 'Practicantes',
-                        data: practicas.map(p => (p.totalEstudiantes || 0) * 10),
-                        backgroundColor: 'rgba(16,185,129,.75)',
-                        borderRadius: 6,
-                        borderSkipped: false,
-                    }
-                ]
-            },
-            options: {
-                responsive: true, maintainAspectRatio: false,
-                plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 10, padding: 16, font: { size: 11 } } } },
-                scales: {
-                    x: { grid: { display: false } },
-                    y: { grid: { color: 'rgba(226,232,240,.5)' }, ticks: { font: { size: 11 } } }
-                }
-            }
-        });
-    }
-
+function _renderDirectorCharts(asigs) {
+    if (typeof Chart !== 'function') return;
     /* Chart 2: Doughnut — estado por institución */
     destroyChart('dirSec');
     const ctxSec = document.getElementById('chartDirectorSecondary');
     if (ctxSec && asigs.length > 0) {
         /* Group by institución */
-        const byInst = {};
+        const byInst = Object.create(null);
         asigs.forEach(a => {
             const k = (a.institucion || 'Sin asignar');
             byInst[k] = (byInst[k] || 0) + 1;
@@ -2243,13 +2160,15 @@ async function loadTutorView(tab, btn) {
                 fetch(`${API_BASE}/tutor/bitacoras?id_tutor=${user.id}`).then(r => r.json()),
                 fetch(`${API_BASE}/tutor/asignaciones?id_tutor=${user.id}`).then(r => r.json()),
             ]);
-            const bits  = bRes.data  || [];
+            if (!bRes.success || !aRes.success) throw new Error(bRes.message || aRes.message);
+            const bits = bRes.data || [];
+            tutorBitacoras = new Map(bits.map(b => [b.id, b]));
             const asigs = aRes.data  || [];
             window._currentTutorBitacoras = bits;
             window._currentTutorAsigs = asigs;
 
-            const pendientes  = bits.filter(b => b.estado !== 'CALIFICADA').length;
-            const calificadas = bits.filter(b => b.estado === 'CALIFICADA').length;
+            const calificadas = bits.filter(b => b.estado === 'CALIFICADA' || b.nota != null).length;
+            const pendientes  = bits.length - calificadas;
             const enRiesgo    = asigs.filter(a => {
                 const pct = a.horasRequeridas > 0 ? (a.horasAcumuladas / a.horasRequeridas) : 0;
                 return pct < 0.5;
@@ -2268,7 +2187,6 @@ async function loadTutorView(tab, btn) {
             <div class="quick-actions-bar">
                 <span class="quick-actions-label">Acciones:</span>
                 <button class="btn-primary-sm" onclick="sigpaAlert('Aprobación en Lote', 'La función de aprobación masiva de bitácoras sin observaciones se encuentra en desarrollo.', 'info')">✅ Aprobar Lote sin Observaciones</button>
-                <button class="btn-secondary" onclick="sigpaAlert('Agenda de Visitas', 'El calendario interactivo de visitas de supervisión docente se encuentra en desarrollo.', 'info')">📅 Agendar Visita de Supervisión</button>
                 <button class="btn-secondary" onclick="loadTutorView('estudiantes')">👥 Ver Mis Practicantes</button>
             </div>
 
@@ -2345,35 +2263,25 @@ async function loadTutorView(tab, btn) {
                     <div class="table-responsive">
                         <table class="data-table">
                             <thead><tr>
-                                <th>Estudiante</th><th>Práctica & Institución</th><th>Visita</th>
-                                <th>Horas</th><th>Estado</th><th>Nota</th><th>Evidencia</th><th>Acción</th>
+                                <th>Estudiante</th><th>Práctica & Institución</th><th>Bitácora</th>
+                                <th>Horas</th><th>Estado</th><th>Nota</th><th>Acción</th>
                             </tr></thead>
                             <tbody>
                                 ${bits.length === 0
                                     ? `<tr><td colspan="8" style="text-align:center;padding:32px;color:#94a3b8;">No hay bitácoras recibidas aún.</td></tr>`
                                     : bits.map(b => `
                                 <tr>
-                                    <td><strong>${b.estudiante}</strong></td>
-                                    <td>${b.practica}<br><small class="text-muted">${b.institucion}</small></td>
-                                    <td>Visita ${b.visita}</td>
+                                    <td><strong>${escaparAcademico(b.estudiante)}</strong></td>
+                                    <td>${escaparAcademico(b.practica)}<br><small class="text-muted">${escaparAcademico(b.institucion)}</small></td>
+                                    <td>Bitácora ${b.visita}</td>
                                     <td><strong>${b.horas}</strong> hrs</td>
                                     <td><span class="status-badge ${b.estado === 'CALIFICADA' ? 'status-graded' : 'status-pending'}">${b.estado}</span></td>
-                                    <td>${b.nota ? `<strong style="color:var(--success)">${b.nota}</strong>` : '—'}</td>
+                                    <td>${b.nota != null ? `<strong style="color:var(--success)">${b.nota}</strong>` : '—'}</td>
                                     <td>
-                                        ${b.evidencia ? `<a href="${resolveEvidenceUrl(b.evidencia)}" target="_blank" rel="noopener noreferrer" style="font-size:12px;color:var(--accent);text-decoration:none;font-weight:600;" title="Ver archivo de evidencia">📎 Evidencia ↗</a>` : '<span class="text-muted" style="font-size:11.5px;">—</span>'}
-                                    </td>
-                                    <td>
-                                        <div style="display:flex;gap:5px;align-items:center;">
-                                            <button class="btn-primary-sm" style="padding:5px 10px;font-size:12px;"
-                                                onclick="openModalCalificar(${b.id}, '${b.estudiante.replace(/'/g, "\\'")}', ${b.visita})">
-                                                ${b.estado === 'CALIFICADA' ? '✏️ Editar' : '🎯 Calificar'}
-                                            </button>
-                                            <button class="btn-secondary" style="padding:5px 8px;font-size:11.5px;"
-                                                onclick="descargarReporteVisita({ idBitacora: ${b.id}, visita: ${b.visita}, estudiante: '${b.estudiante.replace(/'/g, "\\'")}', institucion: '${b.institucion.replace(/'/g, "\\'")}', nota: ${b.nota || 5.0}, comentarios: '${(b.comentarios || '').replace(/'/g, "\\'")}' })"
-                                                title="Descargar Informe de Visita en PDF">
-                                                📄 PDF
-                                            </button>
-                                        </div>
+                                        <button class="btn-primary-sm" style="padding:5px 10px;font-size:12px;"
+                                            onclick="openModalCalificar(${b.id})">
+                                            ${b.estado === 'CALIFICADA' || b.nota != null ? 'Ver bitácora' : 'Calificar'}
+                                        </button>
                                     </td>
                                 </tr>`).join('')}
                             </tbody>
@@ -2436,6 +2344,7 @@ async function loadTutorView(tab, btn) {
 }
 
 function _renderTutorCharts(asigs, bits, calificadas, pendientes) {
+    if (typeof Chart !== 'function') return;
     /* Horizontal Bar: progreso por estudiante */
     destroyChart('tutMain');
     const ctxMain = document.getElementById('chartTutorMain');
@@ -2702,94 +2611,88 @@ async function cambiarEstadoPractica(id, nuevoEstado) {
     } catch (e) { sigpaAlert('Error de Conexión', e.message, 'error'); }
 }
 
-function openModalNuevaPractica() {
-    const modal = document.getElementById('modalNuevaPractica');
-    if (modal) {
-        modal.style.display = 'flex';
-        const inputNombre = document.getElementById('m-prac-nombre');
-        if (inputNombre) inputNombre.focus();
-        return;
-    }
-    // Fallback dinámico inyectado en modalContainer
-    const mc = document.getElementById('modalContainer');
-    mc.innerHTML = `
-    <div class="modal-overlay" onclick="closeModal(event)">
-        <div class="modal-content" onclick="event.stopPropagation()" style="max-width: 540px;">
-            <div class="modal-header">
-                <h3 class="modal-title">➕ Nueva Práctica Pedagógica</h3>
-                <button type="button" class="btn-close" onclick="closeModal()">×</button>
+function escaparAcademico(value) {
+    return String(value ?? '').replace(/[&<>"']/g, char => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    })[char]);
+}
+
+function optionAcademica(value, label) {
+    return `<option value="${escaparAcademico(value)}">${escaparAcademico(label)}</option>`;
+}
+
+function opcionesSemestres() {
+    return '<option value="">Seleccione un semestre</option>' +
+        [1, 2, 3].map(n => optionAcademica(n, `Semestre ${n}`)).join('');
+}
+
+async function leerDatosAcademicos(path) {
+    const response = await fetch(`${API_BASE}${path}`);
+    const result = await response.json();
+    if (!response.ok || !result.success) throw new Error(result.message || 'No se pudieron cargar los datos');
+    return result.data;
+}
+
+async function enviarDatosAcademicos(path, payload) {
+    const response = await fetch(`${API_BASE}${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+    });
+    const result = await response.json();
+    if (!response.ok || !result.success) throw new Error(result.message || 'No se pudo guardar el cambio');
+}
+
+async function openModalNuevaPractica() {
+    try {
+        const instituciones = (await leerDatosAcademicos('/director/instituciones')).filter(i => i.vigente);
+        document.getElementById('modalContainer').innerHTML = `
+        <div class="modal-overlay" onclick="closeModal(event)">
+            <div class="modal-content" onclick="event.stopPropagation()">
+                <div class="modal-header">
+                    <h3 class="modal-title">Nueva Práctica Pedagógica</h3>
+                    <button class="btn-close" onclick="closeModal()">×</button>
+                </div>
+                <form onsubmit="guardarNuevaPractica(event)">
+                    <div class="modal-body">
+                        <label for="m-practica-semestre">Semestre</label>
+                        <div class="input-wrapper"><select id="m-practica-semestre" name="semestre" required>${opcionesSemestres()}</select></div>
+                        <label for="m-practica-inst">Institución</label>
+                        <div class="input-wrapper"><select id="m-practica-inst" name="id_institucion" required>
+                            <option value="">${instituciones.length ? 'Seleccione una institución' : 'No hay convenios vigentes'}</option>
+                            ${instituciones.map(i => optionAcademica(i.id, i.nombre)).join('')}
+                        </select></div>
+                        <label for="m-practica-tipo">Modalidad</label>
+                        <div class="input-wrapper"><select id="m-practica-tipo" name="tipo" required>
+                            <option value="">Seleccione una modalidad</option>
+                            <option value="OBSERVACION">Observación</option><option value="INTERVENCION">Intervención</option>
+                            <option value="DOCENTE">Docente</option><option value="INVESTIGATIVA">Investigativa</option>
+                            <option value="PROFESIONAL">Profesional</option>
+                        </select></div>
+                        <label for="m-practica-horas">Horas requeridas</label>
+                        <div class="input-wrapper"><input id="m-practica-horas" name="horas" type="number" min="1" value="64" required></div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn-secondary" onclick="closeModal()">Cancelar</button>
+                        <button type="submit" class="btn-primary-sm">Crear práctica</button>
+                    </div>
+                </form>
             </div>
-            <form onsubmit="handleGuardarPractica(event)">
-                <div class="modal-body">
-                    <div style="margin-bottom:12px;">
-                        <label for="m-prac-nombre" style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;">Nombre de la Práctica *</label>
-                        <div class="input-wrapper">
-                            <input type="text" id="m-prac-nombre" required placeholder="ej. Práctica Pedagógica I - Observación Contextual">
-                        </div>
-                    </div>
+        </div>`;
+    } catch (error) {
+        sigpaAlert('Nueva práctica', error.message, 'error');
+    }
+}
 
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
-                        <div>
-                            <label for="m-prac-semestre" style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;">Semestre Curricular *</label>
-                            <div class="input-wrapper">
-                                <select id="m-prac-semestre" required style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:13.5px;background:var(--bg-card);color:var(--text-main);">
-                                    <option value="1">P1 — Semestre 1</option>
-                                    <option value="2">P2 — Semestre 2</option>
-                                    <option value="3">P3 — Semestre 3</option>
-                                    <option value="4">P4 — Semestre 4</option>
-                                    <option value="5">P5 — Semestre 5</option>
-                                    <option value="6">P6 — Semestre 6</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div>
-                            <label for="m-prac-tipo" style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;">Código / Modalidad *</label>
-                            <div class="input-wrapper">
-                                <select id="m-prac-tipo" required style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:13.5px;background:var(--bg-card);color:var(--text-main);">
-                                    <option value="OBSERVACION">Observación</option>
-                                    <option value="INVESTIGATIVA">Investigativa</option>
-                                    <option value="INTERVENCION">Intervención</option>
-                                    <option value="INTEGRAL">Integral / Formativa</option>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px;">
-                        <div>
-                            <label for="m-prac-creditos" style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;">Créditos *</label>
-                            <div class="input-wrapper">
-                                <input type="number" id="m-prac-creditos" min="1" max="10" value="3" required placeholder="3">
-                            </div>
-                        </div>
-                        <div>
-                            <label for="m-prac-horas" style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;">Horas Requeridas *</label>
-                            <div class="input-wrapper">
-                                <input type="number" id="m-prac-horas" min="16" max="320" value="64" required placeholder="64">
-                            </div>
-                        </div>
-                        <div>
-                            <label for="m-prac-cupos" style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;">Cupos *</label>
-                            <div class="input-wrapper">
-                                <input type="number" id="m-prac-cupos" min="1" max="100" value="20" required placeholder="20">
-                            </div>
-                        </div>
-                    </div>
-
-                    <div style="margin-bottom:4px;">
-                        <label for="m-prac-desc" style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;">Descripción Pedagógica</label>
-                        <div class="input-wrapper">
-                            <textarea id="m-prac-desc" rows="3" placeholder="Objetivos pedagógicos, competencias formativas y alcances en el aula..."></textarea>
-                        </div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn-secondary" onclick="closeModal()">Cancelar</button>
-                    <button type="submit" class="btn-primary-sm">✔ Crear Práctica</button>
-                </div>
-            </form>
-        </div>
-    </div>`;
+async function guardarNuevaPractica(event) {
+    event.preventDefault();
+    try {
+        await enviarDatosAcademicos('/director/nueva_practica', Object.fromEntries(new FormData(event.currentTarget)));
+        closeModal();
+        loadDirectorView('practicas');
+    } catch (error) {
+        sigpaAlert('Nueva práctica', error.message, 'warning');
+    }
 }
 
 function closeModalNuevaPractica(e) {
@@ -2926,216 +2829,87 @@ async function handleGuardarInstitucion(e) {
     } catch (err) { sigpaAlert('Error de Conexión', err.message, 'error'); }
 }
 
-async function openModalAsignarEstudiante() {
-    const mc = document.getElementById('modalContainer');
-    mc.innerHTML = `<div class="modal-overlay"><div style="background:#fff;border-radius:16px;padding:24px;max-width:400px;width:100%;">${loadingState()}</div></div>`;
-    try {
-        const [uRes, pRes, iRes] = await Promise.all([
-            fetch(`${API_BASE}/director/usuarios`).then(r => r.json()),
-            fetch(`${API_BASE}/director/estado`).then(r => r.json()),
-            fetch(`${API_BASE}/director/instituciones`).then(r => r.json()),
-        ]);
-        const estudiantes  = (uRes.data || []).filter(u => u.rol === 'ESTUDIANTE');
-        const tutores      = (uRes.data || []).filter(u => u.rol === 'TUTOR');
-        const practicas    = (pRes.data || []).filter(p => p.estado === 'ABIERTA');
-        const instituciones = (iRes.data || []).filter(i => i.convenioActivo === 'S');
-
-        mc.innerHTML = `
-        <div class="modal-overlay" onclick="closeModal(event)">
-            <div class="modal-content" onclick="event.stopPropagation()">
-                <div class="modal-header">
-                    <h3 class="modal-title">👤 Asignar Estudiante a Institución</h3>
-                    <button class="btn-close" onclick="closeModal()">×</button>
-                </div>
-                <form onsubmit="handleGuardarAsignacion(event)">
-                    <div class="modal-body">
-                        <div style="margin-bottom:12px;">
-                            <label style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;">Estudiante</label>
-                            <div class="input-wrapper">
-                                <select id="m-asig-est" required>
-                                    ${estudiantes.map(e => `<option value="${e.id}">${e.nombre} (${e.email})</option>`).join('')}
-                                </select>
-                            </div>
-                        </div>
-                        <div style="margin-bottom:12px;">
-                            <label style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;">Práctica Pedagógica</label>
-                            <div class="input-wrapper">
-                                <select id="m-asig-prac" required>
-                                    ${practicas.map(p => `<option value="${p.id}">Sem ${p.semestre} — ${p.nombre} (${p.horas}h)</option>`).join('')}
-                                </select>
-                            </div>
-                        </div>
-                        <div style="margin-bottom:12px;">
-                            <label style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;">Institución Receptora</label>
-                            <div class="input-wrapper">
-                                <select id="m-asig-inst" required>
-                                    ${instituciones.map(i => `<option value="${i.id}">${i.nombre} (${i.estudiantesAsignados}/${i.cupos} cupos)</option>`).join('')}
-                                </select>
-                            </div>
-                        </div>
-                        <div style="margin-bottom:4px;">
-                            <label style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;">Tutor Académico</label>
-                            <div class="input-wrapper">
-                                <select id="m-asig-tut">
-                                    ${tutores.map(t => `<option value="${t.id}">${t.nombre}</option>`).join('')}
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn-secondary" onclick="closeModal()">Cancelar</button>
-                        <button type="submit" class="btn-primary-sm">✔ Confirmar Asignación</button>
-                    </div>
-                </form>
-            </div>
-        </div>`;
-    } catch (e) {
-        mc.innerHTML = '';
-        sigpaAlert('Error de Carga', 'Error al cargar formulario: ' + e.message, 'error');
-    }
-}
-
-async function handleGuardarAsignacion(e) {
-    e.preventDefault();
-    const payload = {
-        id_estudiante:  document.getElementById('m-asig-est').value,
-        id_practica:    document.getElementById('m-asig-prac').value,
-        id_institucion: document.getElementById('m-asig-inst').value,
-        id_tutor:       document.getElementById('m-asig-tut').value,
-    };
-    try {
-        const res = await fetch(`${API_BASE}/director/asignar`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-        const d = await res.json();
-        if (d.success) {
-            closeModal();
-            await sigpaAlert('Asignación Formalizada', d.message || 'El estudiante ha sido asignado formalmente a la institución y práctica.', 'success');
-            loadDirectorView('asignaciones');
-        } else {
-            sigpaAlert('Asignación Institucional', d.message || 'No fue posible completar la asignación institucional.', 'warning');
-        }
-    } catch (err) { sigpaAlert('Error de Conexión', err.message, 'error'); }
-}
-
-/* ── Modal: Crear Nuevo Usuario ─────────────────────────────────────── */
-function openModalNuevoUsuario() {
-    const mc = document.getElementById('modalContainer');
-    mc.innerHTML = `
+function openModalAsignarEstudiante() {
+    document.getElementById('modalContainer').innerHTML = `
     <div class="modal-overlay" onclick="closeModal(event)">
-        <div class="modal-content" onclick="event.stopPropagation()" style="max-width: 480px;">
+        <div class="modal-content" onclick="event.stopPropagation()">
             <div class="modal-header">
-                <h3 class="modal-title">👤 Registrar Nueva Cuenta de Usuario</h3>
+                <h3 class="modal-title">Asignar Estudiante a Institución</h3>
                 <button class="btn-close" onclick="closeModal()">×</button>
             </div>
-            <form onsubmit="handleGuardarNuevoUsuario(event)">
+            <form onsubmit="handleGuardarAsignacion(event)">
                 <div class="modal-body">
-                    <p class="text-muted" style="font-size:12.5px;margin-bottom:14px;">
-                        Crea una cuenta institucional con acceso directo y rol asignado en Oracle 10g.
-                    </p>
-                    
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
-                        <div>
-                            <label style="display:block;font-size:12.5px;font-weight:600;margin-bottom:4px;">Nombres *</label>
-                            <div class="input-wrapper"><input type="text" id="m-usr-nombre" required placeholder="Ej. Carlos"></div>
-                        </div>
-                        <div>
-                            <label style="display:block;font-size:12.5px;font-weight:600;margin-bottom:4px;">Apellidos *</label>
-                            <div class="input-wrapper"><input type="text" id="m-usr-apellido" required placeholder="Ej. Mendoza"></div>
-                        </div>
-                    </div>
-
-                    <div style="margin-bottom:12px;">
-                        <label style="display:block;font-size:12.5px;font-weight:600;margin-bottom:4px;">Correo Institucional *</label>
-                        <div class="input-wrapper"><input type="email" id="m-usr-email" required placeholder="ejemplo@sigpa.edu o @udi.edu.co"></div>
-                    </div>
-
-                    <div style="margin-bottom:12px;">
-                        <label style="display:block;font-size:12.5px;font-weight:600;margin-bottom:4px;">Rol en la Plataforma *</label>
-                        <div class="input-wrapper">
-                            <select id="m-usr-rol" required style="width:100%;padding:10px 12px;border-radius:8px;border:1.5px solid #e2e8f0;font-size:13.5px;outline:none;">
-                                <option value="ESTUDIANTE">🎒 Estudiante (Practicante)</option>
-                                <option value="TUTOR">🎓 Tutor Académico (Docente UDI)</option>
-                                <option value="ASESOR">🏫 Asesor Pedagógico (In Situ en Colegio)</option>
-                                <option value="DIRECTOR">👔 Director(a) de Programa</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div style="margin-bottom:6px;">
-                        <label style="display:block;font-size:12.5px;font-weight:600;margin-bottom:4px;">Contraseña Inicial *</label>
-                        <div class="input-wrapper"><input type="text" id="m-usr-pass" value="1234" required placeholder="Contraseña de acceso inicial"></div>
-                    </div>
+                    <label for="m-asig-sem">Semestre</label>
+                    <div class="input-wrapper"><select id="m-asig-sem" name="semestre" required onchange="cargarOpcionesAsignacion(this.form)">${opcionesSemestres()}</select></div>
+                    <label for="m-asig-est">Estudiante</label>
+                    <div class="input-wrapper"><select id="m-asig-est" name="id_estudiante" required disabled></select></div>
+                    <label for="m-asig-inst">Institución receptora</label>
+                    <div class="input-wrapper"><select id="m-asig-inst" name="id_institucion" required disabled></select></div>
+                    <p class="text-muted" role="status" data-asignacion-estado></p>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn-secondary" onclick="closeModal()">Cancelar</button>
-                    <button type="submit" class="btn-primary-sm" id="btn-save-usr">✔ Crear Cuenta</button>
+                    <button type="submit" class="btn-primary-sm" disabled>Confirmar asignación</button>
                 </div>
             </form>
         </div>
     </div>`;
 }
 
-async function handleGuardarNuevoUsuario(e) {
-    e.preventDefault();
-    const btn = document.getElementById('btn-save-usr');
-    if (btn) btn.disabled = true;
-
-    const payload = {
-        nombre:     document.getElementById('m-usr-nombre').value.trim(),
-        apellido:   document.getElementById('m-usr-apellido').value.trim(),
-        email:      document.getElementById('m-usr-email').value.trim(),
-        rol:        document.getElementById('m-usr-rol').value,
-        contrasena: document.getElementById('m-usr-pass').value.trim(),
-    };
-
+async function cargarOpcionesAsignacion(form) {
+    const { semestre, id_estudiante: estudiante, id_institucion: institucion } = form.elements;
+    const seleccion = semestre.value;
+    const submit = form.querySelector('[type="submit"]');
+    const estado = form.querySelector('[data-asignacion-estado]');
+    const solicitud = Symbol();
+    form.solicitudAsignacion = solicitud;
+    estudiante.disabled = institucion.disabled = submit.disabled = true;
+    estudiante.innerHTML = institucion.innerHTML = '';
+    estado.textContent = seleccion ? 'Cargando opciones…' : '';
+    if (!seleccion) return;
     try {
-        const res = await fetch(`${API_BASE}/director/nuevo_usuario`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-        const d = await res.json();
-        if (d.success) {
-            closeModal();
-            await sigpaAlert('Usuario Registrado', d.message, 'success');
-            loadDirectorView('usuarios');
-        } else {
-            sigpaAlert('Atención', d.message || 'No se pudo crear la cuenta', 'warning');
-            if (btn) btn.disabled = false;
-        }
-    } catch (err) {
-        sigpaAlert('Error de Conexión', 'Error de conexión: ' + err.message, 'error');
-        if (btn) btn.disabled = false;
+        const [estudiantes, instituciones, practicas] = await Promise.all([
+            leerDatosAcademicos(`/director/estudiantes?semestre=${seleccion}`),
+            leerDatosAcademicos('/director/instituciones'),
+            leerDatosAcademicos('/director/practicas'),
+        ]);
+        if (form.solicitudAsignacion !== solicitud) return;
+
+        const disponibles = new Set(practicas.filter(p => p.estado === 'ABIERTA' && p.semestre === Number(seleccion)).map(p => p.idInstitucion));
+        const receptoras = instituciones.filter(i => disponibles.has(i.id) && i.vigente && i.estudiantesAsignados < i.cupos);
+        estudiante.innerHTML = '<option value="">Seleccione un estudiante</option>' + estudiantes.map(e =>
+            optionAcademica(e.id, `${e.nombre} (Semestre ${e.semestre})`)
+        ).join('');
+        institucion.innerHTML = '<option value="">Seleccione una institución</option>' + receptoras.map(i =>
+            optionAcademica(i.id, `${i.nombre} (${i.cupos - i.estudiantesAsignados} cupos disponibles)`)
+        ).join('');
+        estudiante.disabled = !estudiantes.length;
+        institucion.disabled = !receptoras.length;
+        submit.disabled = estudiante.disabled || institucion.disabled;
+        estado.textContent = !estudiantes.length ? 'No hay estudiantes activos en este semestre.' :
+            !receptoras.length ? 'No hay instituciones con práctica abierta y cupos para este semestre.' : '';
+    } catch (error) {
+        if (form.solicitudAsignacion === solicitud) estado.textContent = error.message;
     }
 }
 
-async function cambiarEstadoUsuario(idUsuario, nuevoEstado) {
-    const accion = nuevoEstado === 'S' ? 'activar' : 'desactivar';
-    const confirmado = await sigpaConfirm(
-        'Confirmar Cambio de Estado',
-        `¿Estás seguro de que deseas ${accion} esta cuenta de usuario en el sistema institucional?`,
-        `Sí, ${accion}`,
-        'Cancelar',
-        'warning'
-    );
-    if (!confirmado) return;
-
+async function handleGuardarAsignacion(event) {
+    event.preventDefault();
     try {
-        const res = await fetch(`${API_BASE}/director/cambiar_estado_usuario`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: idUsuario, activo: nuevoEstado })
-        });
-        const d = await res.json();
-        if (d.success) {
-            loadDirectorView('usuarios');
-        } else {
-            sigpaAlert('Estado de Cuenta', d.message || 'Error al cambiar estado', 'warning');
-        }
-    } catch (err) {
-        sigpaAlert('Error de Conexión', err.message, 'error');
+        await enviarDatosAcademicos('/director/asignar', Object.fromEntries(new FormData(event.currentTarget)));
+        closeModal();
+        loadDirectorView('asignaciones');
+    } catch (error) {
+        sigpaAlert('Asignación', error.message, 'warning');
+    }
+}
+
+async function resolverAsignacion(id, estado) {
+    try {
+        await enviarDatosAcademicos('/director/aprobar_asignacion', { id_asignacion: id, estado });
+        loadDirectorView('asignaciones');
+    } catch (error) {
+        sigpaAlert('Asignación', error.message, 'warning');
     }
 }
 
@@ -3143,110 +2917,212 @@ async function cambiarEstadoUsuario(idUsuario, nuevoEstado) {
    TUTOR MODALS (EVALUACIÓN TRANSPARENTE CON 3 MOMENTOS Y EVIDENCIAS)
    ═══════════════════════════════════════════════════════════════════════ */
 
-function openModalCalificar(idBitacora, estudiante, visita) {
-    const user = getCurrentUser();
-    const bit = (window._currentTutorBitacoras || []).find(b => b.id === Number(idBitacora)) || {};
-    const evidenciaUrl = resolveEvidenceUrl(bit.evidencia);
+let tutorBitacoras = new Map();
 
+function textoBitacora(raw) {
+    const data = parseDataPedagogica(raw);
+    if (!data || typeof data !== 'object') return raw || '—';
+    const lines = [];
+    function append(value, label = '') {
+        if (value && typeof value === 'object') {
+            Object.entries(value).forEach(([key, item]) => append(item, Array.isArray(value) ? '' : key));
+        } else if (value != null && value !== '') {
+            lines.push(label ? `${label}: ${value}` : String(value));
+        }
+    }
+    append(data);
+    return lines.join('\n') || '—';
+}
+
+function openModalCalificar(idBitacora) {
+    const bitacora = tutorBitacoras.get(idBitacora);
+    if (!bitacora) return;
+    const calificada = bitacora.estado === 'CALIFICADA' || bitacora.nota != null;
     document.getElementById('modalContainer').innerHTML = `
     <div class="modal-overlay" onclick="closeModal(event)">
         <div class="modal-content" onclick="event.stopPropagation()" style="max-width: 680px; max-height: 90vh; overflow-y: auto;">
             <div class="modal-header">
-                <h3 class="modal-title">🎯 Calificar y Retroalimentar — Visita ${visita}</h3>
+                <h3 class="modal-title">${calificada ? 'Bitácora' : 'Calificar bitácora'} ${bitacora.visita}</h3>
                 <button class="btn-close" onclick="closeModal()">×</button>
             </div>
-            <form onsubmit="handleGuardarCalificacion(event, ${idBitacora}, ${user.id})">
+            <form onsubmit="handleGuardarCalificacion(event, ${idBitacora})">
                 <div class="modal-body">
-                    <!-- Resumen del practicante y horas -->
-                    <div class="alert-box alert-info" style="margin-bottom:16px;">
-                        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-                            <div>
-                                <strong>Practicante:</strong> ${estudiante || bit.estudiante || 'Estudiante'} &nbsp;|&nbsp;
-                                <strong>Práctica:</strong> ${bit.practica || 'Pedagógica'}
-                            </div>
-                            <div>
-                                <span class="badge" style="background:var(--accent,#4f46e5);color:white;padding:3px 8px;border-radius:4px;font-size:11.5px;font-weight:700;">
-                                    ⏱️ ${bit.horas || 0} Horas de Sesión
-                                </span>
-                                ${bit.fecha ? `&nbsp;<span class="text-muted" style="font-size:11.5px;">📅 ${bit.fecha}</span>` : ''}
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Desglose Transparente: Actividades y 3 Momentos Pedagógicos -->
-                    <div style="margin-bottom:16px;background:var(--bg-main,#f8fafc);border:1px solid var(--border,#e2e8f0);border-radius:8px;padding:14px;">
-                        <h4 style="font-size:13px;font-weight:800;color:var(--text-main);margin-bottom:10px;display:flex;align-items:center;gap:6px;">
-                            <span>📝</span> Detalle de la Bitácora y Momentos Pedagógicos
-                        </h4>
-                        ${renderMomentoPedagogicoHTML(bit.actividades, bit.observaciones)}
-                    </div>
-
-                    <!-- Enlace directo a Evidencia -->
-                    <div style="margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 14px;">
-                        <span style="font-size:12.5px;color:#166534;font-weight:600;display:flex;align-items:center;gap:6px;">
-                            <span>📁</span> Soporte de Evidencia Digital:
-                        </span>
-                        ${evidenciaUrl ? `
-                            <a href="${evidenciaUrl}" target="_blank" rel="noopener noreferrer"
-                               class="btn-primary-sm" style="font-size:12px;padding:5px 12px;text-decoration:none;display:inline-flex;align-items:center;gap:4px;">
-                               📎 Ver Archivo Adjunto (${bit.evidencia && bit.evidencia.length > 30 ? bit.evidencia.substring(0, 30) + '...' : (bit.evidencia || 'Evidencia')}) ↗
-                            </a>
-                        ` : `
-                            <span class="text-muted" style="font-size:12px;font-style:italic;">No se adjuntó archivo de evidencia</span>
-                        `}
-                    </div>
-
-                    <!-- Formulario de Evaluación Cuantitativa y Cualitativa -->
-                    <div style="display:grid;grid-template-columns:1fr 2fr;gap:14px;margin-bottom:14px;">
-                        <div>
-                            <label style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;">Calificación (0.0 a 5.0) *</label>
-                            <div class="input-wrapper">
-                                <input type="number" id="m-eval-nota" min="0.0" max="5.0" step="0.1" value="${bit.nota != null ? bit.nota : '4.5'}" required>
-                            </div>
-                        </div>
-                        <div>
-                            <label style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;">Descargar Informe Preliminar</label>
-                            <button type="button" class="btn-secondary" style="width:100%;height:38px;font-size:12px;"
-                                onclick="descargarReporteVisita({ idBitacora: ${idBitacora}, visita: ${visita}, estudiante: '${(estudiante || '').replace(/'/g, "\\'")}', institucion: '${(bit.institucion || '').replace(/'/g, "\\'")}', nota: document.getElementById('m-eval-nota').value, comentarios: document.getElementById('m-eval-comentarios').value })">
-                                📄 Generar Informe PDF
-                            </button>
-                        </div>
-                    </div>
-
-                    <div style="margin-bottom:4px;">
-                        <label style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;">Concepto Pedagógico y Retroalimentación *</label>
-                        <div class="input-wrapper">
-                            <textarea id="m-eval-comentarios" rows="3" required placeholder="Fortalezas pedagógicas demostradas, recomendaciones didácticas y compromisos para la siguiente visita...">${bit.comentarios || ''}</textarea>
-                        </div>
-                    </div>
+                    <p><strong>Practicante:</strong> ${escaparAcademico(bitacora.estudiante)}</p>
+                    <p><strong>Horas registradas:</strong> ${bitacora.horas}</p>
+                    <details><summary>Actividades y observaciones</summary>
+                        <p style="white-space:pre-wrap;">${escaparAcademico(textoBitacora(bitacora.actividades))}</p>
+                        <p style="white-space:pre-wrap;">${escaparAcademico(textoBitacora(bitacora.observaciones))}</p>
+                    </details>
+                    ${calificada ? `
+                        <p><strong>Calificación:</strong> ${bitacora.nota ?? '—'}</p>
+                        ${bitacora.nota == null ? '' : `<p><strong>Horas validadas:</strong> ${bitacora.nota >= 3 ? bitacora.horas : 0}</p>`}
+                        <p style="white-space:pre-wrap;">${escaparAcademico(bitacora.comentarios)}</p>
+                    ` : `
+                        <label for="m-eval-nota">Calificación (0 a 5)</label>
+                        <div class="input-wrapper"><input type="number" id="m-eval-nota" name="nota" min="0" max="5" step="0.1" required></div>
+                        <label for="m-eval-comentarios">Retroalimentación</label>
+                        <div class="input-wrapper"><textarea id="m-eval-comentarios" name="comentarios" rows="3" required></textarea></div>
+                        <p class="text-muted">Las horas se validan a partir de 3,0. La calificación queda definitiva al guardar.</p>
+                    `}
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn-secondary" onclick="closeModal()">Cancelar</button>
-                    <button type="submit" class="btn-primary-sm">💾 Guardar Calificación</button>
+                    <button type="button" class="btn-secondary" onclick="descargarBitacora(${idBitacora})">Descargar PDF</button>
+                    <button type="button" class="btn-secondary" onclick="closeModal()">Cerrar</button>
+                    ${calificada ? '' : '<button type="submit" class="btn-primary-sm">Guardar calificación</button>'}
                 </div>
             </form>
         </div>
     </div>`;
 }
 
-async function handleGuardarCalificacion(e, idBitacora, idEvaluador) {
-    e.preventDefault();
-    const nota       = document.getElementById('m-eval-nota').value;
-    const comentarios = document.getElementById('m-eval-comentarios').value.trim();
+async function handleGuardarCalificacion(event, idBitacora) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const button = form.querySelector('[type="submit"]');
+    button.disabled = true;
     try {
-        const res = await fetch(`${API_BASE}/tutor/calificar`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id_bitacora: idBitacora, id_evaluador: idEvaluador, nota, comentarios })
-        });
-        const d = await res.json();
-        if (d.success) {
-            closeModal();
-            await sigpaAlert('Calificación Registrada', 'La evaluación formativa de la bitácora ha sido guardada exitosamente.', 'success');
-            loadTutorView('bitacoras');
-        } else {
-            sigpaAlert('Atención', d.message, 'warning');
+        await enviarDatosAcademicos('/tutor/calificar', { ...Object.fromEntries(new FormData(form)), id_bitacora: idBitacora });
+        closeModal();
+        loadTutorView('bitacoras');
+        sigpaToast('Calificación guardada');
+    } catch (error) {
+        sigpaAlert('Calificación', error.message, 'warning');
+    } finally {
+        button.disabled = false;
+    }
+}
+
+function descargarPdfAcademico(titulo, nombreArchivo, secciones) {
+    try {
+        if (!window.jspdf?.jsPDF) {
+            const vista = window.open('', '_blank');
+            if (!vista) throw new Error('Permita abrir la vista de impresión para guardar el PDF');
+            vista.opener = null;
+            vista.document.write(`<!doctype html><html lang="es"><meta charset="utf-8">
+                <title>${escaparAcademico(nombreArchivo.replace(/\.pdf$/, ''))}</title>
+                <style>body{font:12pt Arial,sans-serif;margin:2rem}h2{break-after:avoid}p{white-space:pre-wrap;overflow-wrap:anywhere}</style>
+                <h1>${escaparAcademico(titulo)}</h1>
+                ${secciones.map(([label, content]) => `<h2>${escaparAcademico(label)}</h2><p>${escaparAcademico(content)}</p>`).join('')}
+                </html>`);
+            vista.document.close();
+            vista.focus();
+            vista.print();
+            return;
         }
-    } catch (err) { sigpaAlert('Error de Conexión', err.message, 'error'); }
+        const pdf = new window.jspdf.jsPDF();
+        const margin = 16;
+        const pageWidth = pdf.internal.pageSize.getWidth() - 2 * margin;
+        const bottom = pdf.internal.pageSize.getHeight() - margin;
+        let y = margin + 4;
+        const write = (text, size, style) => {
+            pdf.setFont('helvetica', style);
+            pdf.setFontSize(size);
+            const step = size * 0.45;
+            for (const line of pdf.splitTextToSize(String(text), pageWidth)) {
+                if (y > bottom) {
+                    pdf.addPage();
+                    y = margin + 4;
+                }
+                pdf.text(line, margin, y);
+                y += step;
+            }
+        };
+        write(titulo, 17, 'bold');
+        for (const [label, content] of secciones) {
+            y += 4;
+            if (y + 12 > bottom) {
+                pdf.addPage();
+                y = margin + 4;
+            }
+            write(label, 12, 'bold');
+            write(content, 10, 'normal');
+        }
+        pdf.save(nombreArchivo);
+    } catch (error) {
+        sigpaAlert('Descargar PDF', error.message, 'error');
+    }
+}
+
+function descargarBitacora(id) {
+    const b = tutorBitacoras.get(id);
+    if (!b) return;
+    descargarPdfAcademico(`Bitácora ${b.visita}`, `bitacora-${b.id}.pdf`, [
+        ['Datos', [b.estudiante, b.practica, b.institucion, b.fecha, `Horas registradas: ${b.horas}`].filter(Boolean).join('\n')],
+        ['Actividades', textoBitacora(b.actividades)],
+        ['Observaciones', textoBitacora(b.observaciones)],
+        ['Soporte adjunto', b.evidencia || '—'],
+        ['Evaluación', b.nota == null ? 'Pendiente' : `${b.nota}/5
+${b.comentarios}`],
+    ]);
+}
+
+async function mostrarInformePractica(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const id = Number(form.elements.practica.value);
+    const result = document.getElementById('resultadoInformePractica');
+    const request = Symbol();
+    result.solicitudInforme = request;
+    result.innerHTML = loadingState();
+    try {
+        const [practicas, asignaciones, bitacoras] = await Promise.all([
+            leerDatosAcademicos('/director/practicas'),
+            leerDatosAcademicos('/director/asignaciones'),
+            leerDatosAcademicos(`/tutor/bitacoras?id_practica=${id}`),
+        ]);
+        if (result.solicitudInforme !== request) return;
+        const practica = practicas.find(p => p.id === id && p.estado === 'ABIERTA');
+        if (!practica) throw new Error('La práctica seleccionada ya no está disponible');
+        const participantes = asignaciones.filter(a => a.idPractica === id);
+        const resumen = [
+            `Semestre ${practica.semestre} · ${practica.institucion || 'Institución sin registrar'}`,
+            `Modalidad: ${practica.tipo} · Horas requeridas: ${practica.horas}`,
+            `Asignaciones: ${participantes.length} · Horas validadas: ${participantes.reduce((sum, a) => sum + a.horasAcumuladas, 0)}`,
+        ].join('\n');
+        const progreso = participantes.map(a => `${a.estudiante} · ${a.horasAcumuladas}/${a.horasRequeridas} h · ${a.aprobacion || a.estado}`);
+        const revisiones = bitacoras.map(b => [
+            `${b.estudiante} · Bitácora ${b.visita} · ${b.nota == null ? 'Pendiente' : `${b.nota}/5`}`,
+            b.comentarios,
+            b.observaciones ? textoBitacora(b.observaciones) : '',
+            b.avalAsesor ? `Aval del asesor: ${b.avalAsesor}` : '',
+        ].filter(Boolean).join('\n'));
+        const secciones = [
+            ['Resumen', resumen],
+            ['Cumplimiento de horas', progreso.join('\n') || 'Sin asignaciones.'],
+            ['Evaluaciones y observaciones', revisiones.join('\n\n') || 'Sin bitácoras.'],
+        ];
+        result.innerHTML = `
+            <h4>${escaparAcademico(practica.nombre)}</h4>
+            ${secciones.map(([label, content]) => `<h5>${label}</h5><p style="white-space:pre-wrap;">${escaparAcademico(content)}</p>`).join('')}
+            <button type="button" class="btn-primary-sm" data-descargar>Descargar informe</button>`;
+        result.querySelector('[data-descargar]').addEventListener('click', () =>
+            descargarPdfAcademico(`Informe de ${practica.nombre}`, `informe-practica-${id}.pdf`, secciones)
+        );
+    } catch (error) {
+        if (result.solicitudInforme === request) result.innerHTML = errorState(escaparAcademico(error.message));
+    }
+}
+
+function limpiarInformePractica() {
+    const result = document.getElementById('resultadoInformePractica');
+    result.solicitudInforme = null;
+    result.replaceChildren();
+}
+
+async function mostrarNotificacionesAcademicas(rol) {
+    try {
+        if (rol === 'DIRECTOR') {
+            const items = await leerDatosAcademicos('/director/asignaciones');
+            const pendientes = items.filter(a => a.aprobacion === 'PENDIENTE').length;
+            await sigpaAlert('Notificaciones', pendientes ? `Asignaciones pendientes de aprobación: ${pendientes}.` : 'No hay asignaciones pendientes.', 'info');
+        } else {
+            const items = await leerDatosAcademicos('/tutor/bitacoras');
+            const pendientes = items.filter(b => b.estado !== 'CALIFICADA' && b.nota == null).length;
+            await sigpaAlert('Notificaciones', pendientes ? `Bitácoras pendientes de calificación: ${pendientes}.` : 'No hay bitácoras pendientes.', 'info');
+        }
+    } catch (error) {
+        sigpaAlert('Notificaciones', error.message, 'error');
+    }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════

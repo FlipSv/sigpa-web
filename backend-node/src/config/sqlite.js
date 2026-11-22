@@ -14,6 +14,12 @@ const path = require('path');
 const fs   = require('fs');
 const bcrypt = require('bcryptjs');
 
+const tutoresDemo = [
+    { semestre: 1, nombre: 'Mateo', apellido: 'Gómez', email: 'tutor@sigpa.edu' },
+    { semestre: 2, nombre: 'Lucía', apellido: 'Ramírez', email: 'tutor2@sigpa.edu' },
+    { semestre: 3, nombre: 'Daniel', apellido: 'Herrera', email: 'tutor3@sigpa.edu' },
+];
+
 // Detección de motor SQLite nativo (Node.js 22+) o better-sqlite3
 let DatabaseSync;
 try {
@@ -148,9 +154,11 @@ function initSchema(db) {
         CREATE TABLE IF NOT EXISTS MODALIDAD (
             ID_MODALIDAD INTEGER PRIMARY KEY,
             NOMBRE TEXT NOT NULL,
-            DESCRIPCION TEXT,
-            HORAS_DEFAULT INTEGER DEFAULT 64,
-            ESTADO TEXT DEFAULT 'ACTIVO' CHECK (ESTADO IN ('ACTIVO', 'INACTIVO'))
+            SEMESTRE INTEGER NOT NULL DEFAULT 1 CHECK (SEMESTRE IN (1, 2, 3)),
+            TIPO TEXT DEFAULT 'OBSERVACION',
+            HORAS_REQUERIDAS INTEGER DEFAULT 64,
+            ESTADO TEXT DEFAULT 'ABIERTA' CHECK (ESTADO IN ('ABIERTA', 'CERRADA')),
+            DESCRIPCION TEXT
         );
 
         -- 3. Tabla INSTITUCION
@@ -315,25 +323,14 @@ function seedInitialData(db) {
         }
     }
 
-    // 2. Modalidades de Práctica
-    const modCount = db.prepare('SELECT COUNT(*) AS CNT FROM MODALIDAD').get().CNT;
-    if (modCount === 0) {
-        const insertMod = db.prepare(`
-            INSERT INTO MODALIDAD (ID_MODALIDAD, NOMBRE, DESCRIPCION, HORAS_DEFAULT, ESTADO)
-            VALUES (:id, :nombre, :descripcion, :horas, 'ACTIVO')
-        `);
-        const modalidades = [
-            { id: 1, nombre: 'OBSERVACION', descripcion: 'Práctica de Observación en Infancia', horas: 64 },
-            { id: 2, nombre: 'INTERVENCION', descripcion: 'Práctica de Contextualización e Intervención Inicial', horas: 64 },
-            { id: 3, nombre: 'DOCENTE', descripcion: 'Práctica Pedagógica y Didáctica Docente', horas: 64 },
-            { id: 4, nombre: 'INVESTIGATIVA', descripcion: 'Práctica de Investigación en Primera Infancia', horas: 64 },
-            { id: 5, nombre: 'COMUNITARIA', descripcion: 'Práctica Integral Comunitaria (Formato P5)', horas: 80 },
-            { id: 6, nombre: 'PROFESIONAL', descripcion: 'Práctica de Grado y Liderazgo Infantil (Formato P6)', horas: 96 },
-        ];
-        for (const m of modalidades) {
-            insertMod.run(m);
-        }
-    }
+    const usuarios = [
+        { id: 1, nombre: 'Ana', apellido: 'Martínez (Directora)', email: 'director@sigpa.edu', contrasena: passHash, rol: 'DIRECTOR' },
+        { id: 2, nombre: 'Carlos', apellido: 'Coordinador (Tutor)', email: 'coord@sigpa.edu', contrasena: passHash, rol: 'COORDINADOR' },
+        { id: 3, nombre: 'Laura', apellido: 'Pérez (Estudiante)', email: 'estudiante@sigpa.edu', contrasena: passHash, rol: 'ESTUDIANTE' },
+        { id: 4, nombre: tutoresDemo[0].nombre, apellido: tutoresDemo[0].apellido, email: tutoresDemo[0].email, contrasena: passHash, rol: 'TUTOR' },
+        { id: 5, nombre: 'Clara', apellido: 'Rojas (Asesora In Situ)', email: 'asesor@sigpa.edu', contrasena: passHash, rol: 'ASESOR' },
+        { id: 6, nombre: 'Andrés', apellido: 'Silva (Estudiante)', email: 'estudiante2@sigpa.edu', contrasena: passHash, rol: 'ESTUDIANTE' },
+    ];
 
     // 3. Prácticas Académicas
     const pracCount = db.prepare('SELECT COUNT(*) AS CNT FROM PRACTICA').get().CNT;
@@ -377,25 +374,11 @@ function seedInitialData(db) {
         }
     }
 
-    // 5. Asignaciones
-    const asigCount = db.prepare('SELECT COUNT(*) AS CNT FROM ASIGNACION').get().CNT;
-    if (asigCount === 0) {
-        const insertAsignacion = db.prepare(`
-            INSERT INTO ASIGNACION (ID_ASIGNACION, ID_USUARIO, ID_ESTUDIANTE, ID_TUTOR, ID_PRACTICA, ID_INSTITUCION, HORAS_ACUMULADAS, ESTADO, ESTADO_APROBACION, ESTADO_PRACTICA, FECHA_ASIGNACION)
-            VALUES (:id, :idUsuario, :idEstudiante, :idTutor, :idPractica, :idInstitucion, :horas, 'APROBADA', 'APROBADA', 'EN_CURSO', :fecha)
-        `);
-
-        insertAsignacion.run({
-            id: 1,
-            idUsuario: 3,
-            idEstudiante: 3,
-            idTutor: 2,
-            idPractica: 1,
-            idInstitucion: 1,
-            horas: 16.0,
-            fecha: '2026-08-01',
-        });
-    }
+    const practicas = [
+        { id: 1, nombre: 'Práctica de Observación en Infancia', semestre: 1, tipo: 'OBSERVACION', horas: 64, descripcion: 'Observación diagnóstica en centros infantiles y jardines.' },
+        { id: 2, nombre: 'Práctica de Contextualización e Intervención Inicial', semestre: 2, tipo: 'INTERVENCION', horas: 64, descripcion: 'Acompañamiento pedagógico formativo en aula.' },
+        { id: 3, nombre: 'Práctica Pedagógica y Didáctica Docente', semestre: 3, tipo: 'DOCENTE', horas: 64, descripcion: 'Planificación de unidades didácticas y proyectos lúdicos.' },
+    ];
 
     // 6. Bitácoras
     const bitCount = db.prepare('SELECT COUNT(*) AS CNT FROM BITACORA').get().CNT;
@@ -478,22 +461,28 @@ function seedInitialData(db) {
         });
     }
 
-    // 9. Evidencias
-    const evidCount = db.prepare('SELECT COUNT(*) AS CNT FROM EVIDENCIA').get().CNT;
-    if (evidCount === 0) {
-        const insertEvidencia = db.prepare(`
-            INSERT INTO EVIDENCIA (ID_EVIDENCIA, ID_BITACORA, NUMERO_VISITA, NOMBRE_ARCHIVO, RUTA_ARCHIVO, TIPO_FORMATO, FECHA_CARGA)
-            VALUES (:id, :idBitacora, :visita, :nombre, :ruta, 'PDF', :fecha)
-        `);
-        insertEvidencia.run({
-            id: 1,
-            idBitacora: 1,
-            visita: 1,
-            nombre: 'evidencia_visita_1_udi.pdf',
-            ruta: 'https://drive.google.com/drive/folders/evidencia_visita_1_udi',
-            fecha: '2026-08-15',
-        });
-    }
+    // 4. Asignaciones
+    const insertAsignacion = db.prepare(`
+        INSERT INTO ASIGNACION (ID_ASIGNACION, ID_USUARIO, ID_ESTUDIANTE, ID_TUTOR, ID_PRACTICA, ID_INSTITUCION, HORAS_ACUMULADAS, ESTADO, ESTADO_APROBACION, ESTADO_PRACTICA, FECHA_ASIGNACION)
+        VALUES (:id, :idUsuario, :idEstudiante, :idTutor, :idPractica, :idInstitucion, :horas, 'APROBADA', 'APROBADA', 'EN_CURSO', :fecha)
+    `);
+
+    insertAsignacion.run({
+        id: 1,
+        idUsuario: 3,
+        idEstudiante: 3,
+        idTutor: 4,
+        idPractica: 1,
+        idInstitucion: 1,
+        horas: 16.0,
+        fecha: '2026-08-01',
+    });
+
+    // 5. Bitácoras
+    const insertBitacora = db.prepare(`
+        INSERT INTO BITACORA (ID_BITACORA, ID_ASIGNACION, NUMERO_VISITA, FECHA_REGISTRO, HORAS_SESION, ACTIVIDADES, OBSERVACIONES, URL_EVIDENCIA, ESTADO_REVISION)
+        VALUES (:id, :idAsignacion, :visita, :fecha, :horas, :actividades, :observaciones, :evidencia, :estado)
+    `);
 
     // 10. Banco de Preguntas Guía Pedagógicas (PREGUNTA y PREGUNTA_GUIA)
     const insertPregunta = db.prepare(`
@@ -501,9 +490,30 @@ function seedInitialData(db) {
         VALUES (:id, :idPractica, :visita, :texto, :categoria, :orden)
     `);
 
-    const insertPreguntaGuia = db.prepare(`
-        INSERT OR IGNORE INTO PREGUNTA_GUIA (ID_PREGUNTA, ID_PREGUNTA_GUIA, ID_PRACTICA, ID_MODALIDAD, NUMERO_VISITA, TEXTO_PREGUNTA, CATEGORIA, ORDEN)
-        VALUES (:id, :id, :idPractica, :idMod, :visita, :texto, :categoria, :orden)
+    insertEvaluacion.run({
+        id: 1,
+        idBitacora: 1,
+        idEvaluador: 4,
+        tipo: 'TUTOR',
+        nota: 4.8,
+        comentarios: 'Excelente registro pedagógico y análisis reflexivo de la primera sesión.',
+        fecha: '2026-08-16 10:00:00',
+    });
+
+    insertEvaluacion.run({
+        id: 2,
+        idBitacora: 1,
+        idEvaluador: 5,
+        tipo: 'ASESOR',
+        nota: 4.6,
+        comentarios: 'Acompañamiento pedagógico presencial verificado y acorde con el plan de práctica.',
+        fecha: '2026-08-17 11:30:00',
+    });
+
+    // 7. Preguntas Guía
+    const insertPregunta = db.prepare(`
+        INSERT INTO PREGUNTA (ID_PREGUNTA, ID_PRACTICA, NUMERO_VISITA, TEXTO_PREGUNTA, ORDEN)
+        VALUES (:id, :idPractica, :visita, :texto, :orden)
     `);
 
     const bancoPreguntas = [
@@ -549,6 +559,66 @@ function seedInitialData(db) {
         } catch (e) {}
 
     console.log('[MOCK-DB] ✔ Datos iniciales de prueba y 10 tablas normalizadas sincronizadas.');
+}
+
+function configureSemesters(db) {
+    const practices = db.prepare('PRAGMA table_info(PRACTICA)').all();
+    if (!practices.some(column => column.name === 'ID_INSTITUCION')) {
+        db.exec(`
+            ALTER TABLE PRACTICA ADD ID_INSTITUCION INTEGER REFERENCES INSTITUCION(ID_INSTITUCION);
+            UPDATE PRACTICA SET ID_INSTITUCION = (
+                SELECT MIN(a.ID_INSTITUCION) FROM ASIGNACION a
+                WHERE a.ID_PRACTICA = PRACTICA.ID_PRACTICA
+                HAVING COUNT(DISTINCT a.ID_INSTITUCION) = 1
+            );
+            UPDATE PRACTICA SET ID_INSTITUCION = SEMESTRE
+            WHERE ID_INSTITUCION IS NULL AND SEMESTRE IN (2, 3)
+              AND EXISTS (SELECT 1 FROM INSTITUCION i WHERE i.ID_INSTITUCION = PRACTICA.SEMESTRE)
+              AND NOMBRE IN ('Práctica de Contextualización e Intervención Inicial', 'Práctica Pedagógica y Didáctica Docente');
+        `);
+    }
+
+    const columns = db.prepare('PRAGMA table_info(USUARIO)').all();
+    if (!columns.some(column => column.name === 'SEMESTRE')) {
+        db.exec('ALTER TABLE USUARIO ADD SEMESTRE INTEGER CHECK (SEMESTRE IN (1, 2, 3))');
+    }
+
+    db.exec(`
+        CREATE UNIQUE INDEX IF NOT EXISTS UQ_TUTOR_SEMESTRE
+        ON USUARIO (SEMESTRE) WHERE ROL = 'TUTOR';
+
+        UPDATE USUARIO SET SEMESTRE = CASE EMAIL
+            WHEN 'estudiante@sigpa.edu' THEN 1
+            WHEN 'estudiante2@sigpa.edu' THEN 2
+        END
+        WHERE ROL = 'ESTUDIANTE' AND SEMESTRE IS NULL
+          AND EMAIL IN ('estudiante@sigpa.edu', 'estudiante2@sigpa.edu');
+    `);
+
+    const findTutor = db.prepare(`
+        SELECT ID_USUARIO FROM USUARIO WHERE ROL = 'TUTOR' AND SEMESTRE = ?
+    `);
+    const linkTutor = db.prepare(`
+        UPDATE USUARIO SET SEMESTRE = :semestre
+        WHERE EMAIL = :email AND ROL = 'TUTOR' AND SEMESTRE IS NULL
+    `);
+    const insertTutor = db.prepare(`
+        INSERT INTO USUARIO (NOMBRE, APELLIDO, EMAIL, CONTRASENA, ROL, SEMESTRE)
+        VALUES (:nombre, :apellido, :email, :contrasena, 'TUTOR', :semestre)
+        ON CONFLICT (EMAIL) DO NOTHING
+    `);
+    const demoTutor = db.prepare("SELECT ID_USUARIO FROM USUARIO WHERE EMAIL = 'tutor@sigpa.edu' AND ROL = 'TUTOR'").get();
+    if (!demoTutor) return;
+
+    let demoPasswordHash;
+    for (const tutor of tutoresDemo) {
+        if (findTutor.get(tutor.semestre)) continue;
+        const linked = linkTutor.run({ semestre: tutor.semestre, email: tutor.email });
+        if (linked.changes === 0) {
+            demoPasswordHash ??= bcrypt.hashSync('1234', 10);
+            insertTutor.run({ ...tutor, contrasena: demoPasswordHash });
+        }
+    }
 }
 
 /**
@@ -645,7 +715,17 @@ async function initSqlite() {
     }
     registerOracleCompatibilityFunctions(dbInstance);
     initSchema(dbInstance);
-    seedInitialData(dbInstance);
+    dbInstance.exec('BEGIN IMMEDIATE');
+    try {
+        seedInitialData(dbInstance);
+        configureSemesters(dbInstance);
+        dbInstance.exec('COMMIT');
+    } catch (error) {
+        dbInstance.exec('ROLLBACK');
+        dbInstance.close();
+        dbInstance = null;
+        throw error;
+    }
 
     console.log('[MOCK-DB] ✔ Base de datos SQLite lista para peticiones.');
     console.log('====================================================');
@@ -672,11 +752,22 @@ async function closeSqlite() {
 /**
  * Ejecuta una consulta SQL en SQLite retornando formato compatible con Oracle
  */
-async function executeSqliteQuery(sql, binds = {}, options = {}) {
-    if (!dbInstance) {
-        await initSqlite();
-    }
+let operationQueue = Promise.resolve();
 
+function enqueueSqliteOperation(callback) {
+    const operation = operationQueue.then(callback);
+    operationQueue = operation.catch(() => {});
+    return operation;
+}
+
+function executeSqliteQuery(sql, binds = {}) {
+    return enqueueSqliteOperation(async () => {
+        if (!dbInstance) await initSqlite();
+        return runSqliteQuery(sql, binds);
+    });
+}
+
+function runSqliteQuery(sql, binds = {}) {
     const translatedSql = translateSql(sql);
     const filteredBinds = filterBindsForSql(translatedSql, binds);
 
@@ -709,8 +800,8 @@ async function executeSqliteQuery(sql, binds = {}, options = {}) {
  */
 function createConnectionAdapter() {
     return {
-        async execute(sql, binds = {}, options = {}) {
-            return executeSqliteQuery(sql, binds, options);
+        async execute(sql, binds = {}) {
+            return runSqliteQuery(sql, binds);
         },
         async commit() {},
         async rollback() {},
@@ -721,12 +812,16 @@ function createConnectionAdapter() {
 /**
  * Ejecuta transacciones dentro de SQLite
  */
-async function executeSqliteTransaction(callback) {
+function executeSqliteTransaction(callback) {
+    return enqueueSqliteOperation(() => runSqliteTransaction(callback));
+}
+
+async function runSqliteTransaction(callback) {
     if (!dbInstance) {
         await initSqlite();
     }
 
-    dbInstance.exec('BEGIN TRANSACTION;');
+    dbInstance.exec('BEGIN IMMEDIATE');
     const connAdapter = createConnectionAdapter();
 
     try {

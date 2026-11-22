@@ -5,9 +5,7 @@
  *   GET  /api/director/kpis
  *   GET  /api/director/estado        (prácticas)
  *   GET  /api/director/instituciones
- *   GET  /api/director/usuarios
- *   POST /api/director/nuevo_usuario
- *   POST /api/director/cambiar_estado_usuario
+ *   GET  /api/director/estudiantes
  *   GET  /api/director/asignaciones
  *   POST /api/director/cambiar_estado
  *   POST /api/director/nueva_practica
@@ -16,11 +14,9 @@
  */
 'use strict';
 
-const bcrypt = require('bcryptjs');
-const { executeQuery } = require('../config/database');
+const { executeQuery, executeTransaction } = require('../config/database');
 const { createError } = require('../middlewares/errorHandler');
 
-/* ── GET /api/director/kpis ──────────────────────────────────────────── */
 /* ── GET /api/director/kpis ──────────────────────────────────────────── */
 async function getKpis(req, res, next) {
     try {
@@ -31,14 +27,22 @@ async function getKpis(req, res, next) {
         const totalHoras = hrsRes.rows && hrsRes.rows[0] ? Number(hrsRes.rows[0].HRS || 0) : 0;
 
         const instRes = await executeQuery(`
-            SELECT COUNT(*) AS CNT, NVL(SUM(CUPOS_DISPONIBLES), 0) AS CUP
-            FROM INSTITUCION
-            WHERE CONVENIO_ACTIVO = 'S'
+            SELECT COUNT(*) AS CNT, NVL(SUM(
+                CASE WHEN i.CUPOS_DISPONIBLES > NVL(a.OCUPADOS, 0)
+                     THEN i.CUPOS_DISPONIBLES - NVL(a.OCUPADOS, 0) ELSE 0 END
+            ), 0) AS CUP
+            FROM INSTITUCION i
+            LEFT JOIN (
+                SELECT ID_INSTITUCION, COUNT(*) AS OCUPADOS FROM ASIGNACION
+                WHERE ESTADO_PRACTICA IN ('PENDIENTE', 'EN_CURSO')
+                GROUP BY ID_INSTITUCION
+            ) a ON a.ID_INSTITUCION = i.ID_INSTITUCION
+            WHERE ${vigenciaInstitucion}
         `);
         const conveniosActivos = instRes.rows && instRes.rows[0] ? Number(instRes.rows[0].CNT || 0) : 0;
         const cuposDisponibles = instRes.rows && instRes.rows[0] ? Number(instRes.rows[0].CUP || 0) : 0;
 
-        const pracRes = await executeQuery(`SELECT COUNT(*) AS CNT FROM PRACTICA WHERE ESTADO = 'ABIERTA'`);
+        const pracRes = await executeQuery(`SELECT COUNT(*) AS CNT FROM PRACTICA WHERE ESTADO = 'ABIERTA' AND SEMESTRE IN (1, 2, 3)`);
         const practicasAbiertas = pracRes.rows && pracRes.rows[0] ? Number(pracRes.rows[0].CNT || 0) : 0;
 
         const metrics = {
@@ -63,27 +67,7 @@ async function getKpis(req, res, next) {
             stats: metrics
         });
     } catch (err) {
-        console.error('Error en getKpis:', err);
-        const fallbackMetrics = {
-            totalEstudiantes: 0,
-            totalHoras: 0,
-            conveniosActivos: 0,
-            cuposDisponibles: 0,
-            practicasAbiertas: 0,
-            estudiantes: 0,
-            horas: 0,
-            convenios: 0,
-            cupos: 0,
-            practicas: 0
-        };
-        res.json({
-            success: true,
-            status: 'success',
-            ...fallbackMetrics,
-            data: fallbackMetrics,
-            kpis: fallbackMetrics,
-            stats: fallbackMetrics
-        });
+        next(err);
     }
 }
 
@@ -92,10 +76,12 @@ async function getPracticas(req, res, next) {
     try {
         const sql = `
             SELECT p.ID_PRACTICA, p.SEMESTRE, p.TIPO, p.HORAS_REQUERIDAS,
-                   p.NOMBRE, p.ESTADO, p.DESCRIPCION,
+                   p.NOMBRE, p.ESTADO, p.ID_INSTITUCION, i.NOMBRE AS INSTITUCION,
                    (SELECT COUNT(*) FROM ASIGNACION a WHERE a.ID_PRACTICA = p.ID_PRACTICA) AS TOTAL_ESTUDIANTES
             FROM PRACTICA p
-            ORDER BY p.SEMESTRE ASC
+            LEFT JOIN INSTITUCION i ON i.ID_INSTITUCION = p.ID_INSTITUCION
+            WHERE p.SEMESTRE IN (1, 2, 3)
+            ORDER BY p.SEMESTRE, p.ID_PRACTICA
         `;
         const result = await executeQuery(sql);
 
@@ -108,13 +94,13 @@ async function getPracticas(req, res, next) {
                 horas: r.HORAS_REQUERIDAS,
                 nombre: r.NOMBRE,
                 estado: r.ESTADO,
-                descripcion: r.DESCRIPCION || '',
+                idInstitucion: r.ID_INSTITUCION,
+                institucion: r.INSTITUCION || '',
                 totalEstudiantes: r.TOTAL_ESTUDIANTES || 0,
             })),
         });
     } catch (err) {
-        console.warn('Aviso en getPracticas:', err.message);
-        res.json({ success: true, data: [] });
+        next(err);
     }
 }
 
@@ -125,7 +111,8 @@ async function getInstituciones(req, res, next) {
             SELECT ID_INSTITUCION, NOMBRE, DIRECCION, TELEFONO,
                    CONVENIO_ACTIVO, CUPOS_DISPONIBLES,
                    TO_CHAR(FECHA_VENC_CONVENIO, 'YYYY-MM-DD') AS FECHA_VENC_CONVENIO,
-                   (SELECT COUNT(*) FROM ASIGNACION a WHERE a.ID_INSTITUCION = i.ID_INSTITUCION) AS ESTUDIANTES_ASIGNADOS
+                   CASE WHEN ${vigenciaInstitucion} THEN 'S' ELSE 'N' END AS VIGENTE,
+                   (SELECT COUNT(*) FROM ASIGNACION a WHERE a.ID_INSTITUCION = i.ID_INSTITUCION AND a.ESTADO_PRACTICA IN ('EN_CURSO', 'PENDIENTE')) AS ESTUDIANTES_ASIGNADOS
             FROM INSTITUCION i
             ORDER BY i.NOMBRE ASC
         `;
@@ -139,8 +126,9 @@ async function getInstituciones(req, res, next) {
                 direccion: r.DIRECCION || '',
                 telefono: r.TELEFONO || '',
                 convenioActivo: r.CONVENIO_ACTIVO,
+                vigente: r.VIGENTE === 'S',
                 cupos: r.CUPOS_DISPONIBLES,
-                vencimiento: r.FECHA_VENC_CONVENIO || '2027-12-31',
+                vencimiento: r.FECHA_VENC_CONVENIO || '',
                 estudiantesAsignados: r.ESTUDIANTES_ASIGNADOS || 0,
                 ocupados: r.ESTUDIANTES_ASIGNADOS || 0,
             })),
@@ -148,94 +136,20 @@ async function getInstituciones(req, res, next) {
     } catch (err) { next(err); }
 }
 
-/* ── GET /api/director/usuarios ──────────────────────────────────────── */
-async function getUsuarios(req, res, next) {
+async function getEstudiantes(req, res, next) {
     try {
-        const sql = `
-            SELECT ID_USUARIO, NOMBRE, APELLIDO, EMAIL, ROL, ACTIVO
-            FROM USUARIO
-            ORDER BY ID_USUARIO ASC
-        `;
-        const result = await executeQuery(sql);
-
-        res.json({
-            success: true,
-            data: result.rows.map(r => ({
-                id: r.ID_USUARIO,
-                nombre: `${r.NOMBRE || ''} ${r.APELLIDO || ''}`.trim(),
-                nombres: r.NOMBRE || '',
-                apellidos: r.APELLIDO || '',
-                email: r.EMAIL,
-                rol: r.ROL,
-                activo: r.ACTIVO || 'S',
-            })),
-        });
-    } catch (err) { next(err); }
-}
-
-/* ── POST /api/director/nuevo_usuario ────────────────────────────────── */
-async function nuevoUsuario(req, res, next) {
-    try {
-        const { nombre, apellido, email, contrasena, rol } = req.body;
-        if (!nombre || !email || !contrasena || !rol) {
-            throw createError(400, 'Todos los campos (nombre, email, contraseña, rol) son obligatorios');
-        }
-
-        const validRoles = ['DIRECTOR', 'TUTOR', 'ASESOR', 'ESTUDIANTE'];
-        const rolUpper = rol.toUpperCase().trim();
-        if (!validRoles.includes(rolUpper)) {
-            throw createError(400, `Rol no válido. Debe ser uno de: ${validRoles.join(', ')}`);
-        }
-
-        const cleanEmail = email.toLowerCase().trim();
-
-        // Validar unicidad del correo
-        const checkSql = `SELECT COUNT(*) AS CNT FROM USUARIO WHERE LOWER(EMAIL) = :email`;
-        const checkRes = await executeQuery(checkSql, { email: cleanEmail });
-        if (checkRes.rows[0].CNT > 0) {
-            throw createError(400, `El correo ${cleanEmail} ya se encuentra registrado en el sistema`);
-        }
-
-        // Cifrado unidireccional de la contraseña con bcrypt
-        const hashedPassword = await bcrypt.hash(contrasena.trim(), 10);
-
-        const insertSql = `
-            INSERT INTO USUARIO (ID_USUARIO, NOMBRE, APELLIDO, EMAIL, CONTRASENA, ROL, ACTIVO)
-            VALUES ((SELECT NVL(MAX(ID_USUARIO), 0) + 1 FROM USUARIO), :nombre, :apellido, :email, :contrasena, :rol, 'S')
-        `;
-        await executeQuery(insertSql, {
-            nombre: nombre.trim(),
-            apellido: (apellido || '').trim(),
-            email: cleanEmail,
-            contrasena: hashedPassword,
-            rol: rolUpper,
-        });
-
-        res.json({
-            success: true,
-            message: `Cuenta para ${rolUpper} (${cleanEmail}) creada exitosamente en SIGPA`
-        });
-    } catch (err) { next(err); }
-}
-
-/* ── POST /api/director/cambiar_estado_usuario ───────────────────────── */
-async function cambiarEstadoUsuario(req, res, next) {
-    try {
-        const { id, activo } = req.body;
-        if (!id || !activo) throw createError(400, 'Faltan parámetros id o activo');
-
-        const estadoUpper = activo.toUpperCase().trim();
-        if (!['S', 'N'].includes(estadoUpper)) {
-            throw createError(400, "El estado debe ser 'S' (Activo) o 'N' (Inactivo)");
-        }
-
-        const sql = `UPDATE USUARIO SET ACTIVO = :activo WHERE ID_USUARIO = :id`;
-        await executeQuery(sql, { activo: estadoUpper, id: Number(id) });
-
-        res.json({
-            success: true,
-            message: `Estado de usuario actualizado a: ${estadoUpper === 'S' ? 'Activo' : 'Inactivo'}`
-        });
+        const semestre = Number(req.query.semestre);
+        if (![1, 2, 3].includes(semestre)) throw createError(400, 'Seleccione un semestre válido');
+        const result = await executeQuery(`
+            SELECT ID_USUARIO, NOMBRE, APELLIDO FROM USUARIO
+            WHERE ROL = 'ESTUDIANTE' AND ACTIVO = 'S' AND SEMESTRE = :semestre
+            ORDER BY NOMBRE, APELLIDO
+        `, { semestre });
+        res.json({ success: true, data: result.rows.map(row => ({
+            id: row.ID_USUARIO,
+            nombre: `${row.NOMBRE} ${(row.APELLIDO || '').replace(/ \(Estudiante\)$/, '')}`.trim(),
+            semestre,
+        })) });
     } catch (err) { next(err); }
 }
 
@@ -243,7 +157,7 @@ async function cambiarEstadoUsuario(req, res, next) {
 async function getAsignaciones(req, res, next) {
     try {
         const sql = `
-            SELECT a.ID_ASIGNACION, a.HORAS_ACUMULADAS, a.ESTADO_PRACTICA,
+            SELECT a.ID_ASIGNACION, a.HORAS_ACUMULADAS, a.ESTADO_PRACTICA, a.ESTADO_APROBACION, a.ID_PRACTICA,
                    TO_CHAR(a.FECHA_ASIGNACION, 'YYYY-MM-DD') AS FECHA_ASIGNACION,
                    u.NOMBRE || ' ' || NVL(u.APELLIDO, '') AS ESTUDIANTE,
                    t.NOMBRE || ' ' || NVL(t.APELLIDO, '') AS TUTOR,
@@ -262,6 +176,8 @@ async function getAsignaciones(req, res, next) {
             success: true,
             data: result.rows.map(r => ({
                 id: r.ID_ASIGNACION,
+                idPractica: r.ID_PRACTICA,
+                aprobacion: r.ESTADO_APROBACION,
                 estudiante: (r.ESTUDIANTE || '').trim(),
                 tutor: (r.TUTOR || '').trim(),
                 practica: r.PRACTICA,
@@ -273,8 +189,7 @@ async function getAsignaciones(req, res, next) {
             })),
         });
     } catch (err) {
-        console.warn('Aviso en getAsignaciones:', err.message);
-        res.json({ success: true, data: [] });
+        next(err);
     }
 }
 
@@ -282,7 +197,9 @@ async function getAsignaciones(req, res, next) {
 async function cambiarEstado(req, res, next) {
     try {
         const { id, estado } = req.body;
-        if (!id || !estado) throw createError(400, 'Faltan parámetros id o estado');
+        if (!Number.isInteger(Number(id)) || Number(id) < 1 || !['ABIERTA', 'CERRADA'].includes(estado)) {
+            throw createError(400, 'Seleccione una práctica y un estado válidos');
+        }
 
         const estadoUpper = String(estado).toUpperCase().trim();
         if (!['ABIERTA', 'CERRADA'].includes(estadoUpper)) {
@@ -290,7 +207,8 @@ async function cambiarEstado(req, res, next) {
         }
 
         const sql = `UPDATE PRACTICA SET ESTADO = :estado WHERE ID_PRACTICA = :id`;
-        await executeQuery(sql, { estado: estadoUpper, id: Number(id) });
+        const result = await executeQuery(sql, { estado, id: Number(id) });
+        if (!result.rowsAffected) throw createError(404, 'La práctica no existe');
 
         res.json({ success: true, message: 'Estado actualizado correctamente' });
     } catch (err) { next(err); }
@@ -299,53 +217,30 @@ async function cambiarEstado(req, res, next) {
 /* ── POST /api/director/nueva_practica ───────────────────────────────── */
 async function nuevaPractica(req, res, next) {
     try {
-        const { nombre, semestre, tipo, horas, horas_requeridas, descripcion, creditos, cupos } = req.body;
-        const nombreVal = nombre ? String(nombre).trim() : '';
-
-        let semestreVal = null;
-        if (semestre != null && semestre !== '') {
-            if (typeof semestre === 'number') {
-                semestreVal = semestre;
-            } else {
-                const sStr = String(semestre).trim();
-                const m = sStr.match(/\d+/);
-                semestreVal = m ? parseInt(m[0], 10) : Number(sStr);
-            }
+        const semestre = Number(req.body.semestre);
+        const institucion = Number(req.body.id_institucion);
+        const horas = Number(req.body.horas);
+        const tipo = req.body.tipo;
+        const modalidades = ['OBSERVACION', 'INTERVENCION', 'DOCENTE', 'INVESTIGATIVA', 'PROFESIONAL'];
+        if (![1, 2, 3].includes(semestre) || !Number.isInteger(institucion) || institucion < 1 ||
+            !Number.isInteger(horas) || horas < 1 || !modalidades.includes(tipo)) {
+            throw createError(400, 'Seleccione semestre, institución, modalidad y horas válidos');
         }
 
-        const horasVal = Number(horas || horas_requeridas);
-        const creditosVal = creditos != null ? Number(creditos) : 3;
-        const cuposVal = cupos != null ? Number(cupos) : 20;
-
-        if (!nombreVal || semestreVal === null || isNaN(semestreVal) || semestreVal <= 0 || semestreVal > 10 ||
-            isNaN(horasVal) || horasVal <= 0 || isNaN(creditosVal) || creditosVal <= 0 || isNaN(cuposVal) || cuposVal <= 0) {
-            throw createError(400, 'Faltan datos obligatorios o valores inválidos de la práctica (nombre, semestre 1-10, horas > 0, créditos > 0)');
-        }
-
-        const tipoVal = tipo ? String(tipo).trim().toUpperCase() : 'INVESTIGATIVA';
-        const descVal = descripcion ? String(descripcion).trim() : '';
-
-        let nextId = 1;
-        try {
-            const maxRes = await executeQuery('SELECT NVL(MAX(ID_PRACTICA), 0) AS MAX_ID FROM PRACTICA');
-            if (maxRes.rows && maxRes.rows[0]) {
-                nextId = Number(maxRes.rows[0].MAX_ID || 0) + 1;
-            }
-        } catch (e) {
-            nextId = Date.now() % 100000;
-        }
-
-        const sql = `
-            INSERT INTO PRACTICA (ID_PRACTICA, NOMBRE, SEMESTRE, TIPO, HORAS_REQUERIDAS, ESTADO, DESCRIPCION)
-            VALUES (:nextId, :nombre, :semestre, :tipo, :horas, 'ABIERTA', :descripcion)
-        `;
-        await executeQuery(sql, {
-            nextId,
-            nombre: nombreVal,
-            semestre: semestreVal,
-            tipo: tipoVal,
-            horas: horasVal,
-            descripcion: descVal,
+        await executeTransaction(async conn => {
+            await lockOracleTable(conn, 'PRACTICA');
+            const result = await conn.execute(`
+                INSERT INTO PRACTICA (ID_PRACTICA, NOMBRE, SEMESTRE, TIPO, HORAS_REQUERIDAS, ESTADO, ID_INSTITUCION)
+                SELECT (SELECT NVL(MAX(ID_PRACTICA), 0) + 1 FROM PRACTICA), :nombre,
+                       :semestre, :tipo, :horas, 'ABIERTA', i.ID_INSTITUCION
+                FROM INSTITUCION i
+                WHERE i.ID_INSTITUCION = :institucion AND ${vigenciaInstitucion}
+                  AND NOT EXISTS (SELECT 1 FROM PRACTICA p
+                                  WHERE p.SEMESTRE = :semestreExistente AND p.ID_INSTITUCION = i.ID_INSTITUCION)
+                  AND (SELECT COUNT(*) FROM PRACTICA p WHERE p.SEMESTRE = :semestreLimite) <
+                      (SELECT COUNT(*) FROM INSTITUCION i WHERE ${vigenciaInstitucion})
+            `, { nombre: `Práctica ${semestre}`, semestre, semestreExistente: semestre, semestreLimite: semestre, tipo, horas, institucion }, { autoCommit: false });
+            if (!result.rowsAffected) throw createError(409, 'Institución sin convenio vigente o límite de prácticas alcanzado para ese semestre');
         });
 
         res.json({
@@ -393,77 +288,63 @@ async function nuevaInstitucion(req, res, next) {
 /* ── POST /api/director/asignar ──────────────────────────────────────── */
 async function asignarEstudiante(req, res, next) {
     try {
-        const { id_estudiante, id_tutor, id_practica, id_institucion } = req.body;
-
-        if (!id_estudiante || !id_practica || !id_institucion) {
-            throw createError(400, 'Faltan datos de asignación obligatorios');
+        const estudiante = Number(req.body.id_estudiante);
+        const semestre = Number(req.body.semestre);
+        const institucion = Number(req.body.id_institucion);
+        if (![1, 2, 3].includes(semestre) || !Number.isInteger(estudiante) || estudiante < 1 ||
+            !Number.isInteger(institucion) || institucion < 1) {
+            throw createError(400, 'Seleccione semestre, estudiante e institución válidos');
         }
 
-        const idInst = Number(id_institucion);
+        await executeTransaction(async conn => {
+            await lockOracleTable(conn, 'ASIGNACION');
+            const result = await conn.execute(`
+                INSERT INTO ASIGNACION (
+                    ID_ASIGNACION, ID_USUARIO, ID_ESTUDIANTE, ID_TUTOR, ID_PRACTICA, ID_INSTITUCION,
+                    HORAS_ACUMULADAS, ESTADO, ESTADO_APROBACION, ESTADO_PRACTICA, FECHA_ASIGNACION
+                )
+                SELECT (SELECT NVL(MAX(ID_ASIGNACION), 0) + 1 FROM ASIGNACION),
+                       u.ID_USUARIO, u.ID_USUARIO, t.ID_USUARIO, p.ID_PRACTICA, i.ID_INSTITUCION,
+                       0, 'PENDIENTE', 'PENDIENTE', 'PENDIENTE', SYSDATE
+                FROM USUARIO u
+                JOIN USUARIO t ON t.SEMESTRE = u.SEMESTRE AND t.ROL = 'TUTOR' AND t.ACTIVO = 'S'
+                JOIN PRACTICA p ON p.SEMESTRE = u.SEMESTRE AND p.ESTADO = 'ABIERTA'
+                JOIN INSTITUCION i ON i.ID_INSTITUCION = p.ID_INSTITUCION
+                WHERE u.ID_USUARIO = :estudiante AND u.ROL = 'ESTUDIANTE' AND u.ACTIVO = 'S'
+                  AND u.SEMESTRE = :semestre AND i.ID_INSTITUCION = :institucion AND ${vigenciaInstitucion}
+                  AND (SELECT COUNT(*) FROM ASIGNACION a WHERE a.ID_INSTITUCION = i.ID_INSTITUCION
+                       AND a.ESTADO_PRACTICA IN ('EN_CURSO', 'PENDIENTE')) < i.CUPOS_DISPONIBLES
+                  AND NOT EXISTS (SELECT 1 FROM ASIGNACION a WHERE a.ID_ESTUDIANTE = u.ID_USUARIO
+                                  AND a.ESTADO_PRACTICA IN ('EN_CURSO', 'PENDIENTE'))
+            `, { estudiante, semestre, institucion }, { autoCommit: false });
+            if (!result.rowsAffected) throw createError(409, 'Verifique el semestre, el tutor activo, la práctica abierta, el cupo y las asignaciones existentes');
+        });
 
-        /* Validar institución en Oracle: convenio activo y cupos disponibles */
-        const valSql = `
-            SELECT CONVENIO_ACTIVO, CUPOS_DISPONIBLES,
-                   (SELECT COUNT(*) FROM ASIGNACION WHERE ID_INSTITUCION = :idInst AND ESTADO_PRACTICA = 'EN_CURSO') AS OCUPADOS
-            FROM INSTITUCION
-            WHERE ID_INSTITUCION = :idInst
-        `;
-        const instRes = await executeQuery(valSql, { idInst });
-        const inst = instRes.rows && instRes.rows.length > 0 ? instRes.rows[0] : null;
+        res.json({ success: true, message: 'Asignación registrada y pendiente de aprobación' });
+    } catch (err) { next(err); }
+}
 
-        if (!inst) throw createError(400, 'La institución no existe');
-        if (inst.CONVENIO_ACTIVO !== 'S') {
-            throw createError(400, 'Bloqueo normativo: La institución no cuenta con convenio activo vigente');
+const vigenciaInstitucion = "i.CONVENIO_ACTIVO = 'S' AND TO_CHAR(i.FECHA_VENC_CONVENIO, 'YYYY-MM-DD') >= TO_CHAR(SYSDATE, 'YYYY-MM-DD')";
+
+async function lockOracleTable(conn, table) {
+    if (!['true', '1'].includes(process.env.USE_MOCK_DB)) {
+        await conn.execute(`LOCK TABLE ${table} IN SHARE ROW EXCLUSIVE MODE`, {}, { autoCommit: false });
+    }
+}
+
+async function aprobarAsignacion(req, res, next) {
+    try {
+        const id = Number(req.body.id_asignacion);
+        const estado = req.body.estado;
+        if (!Number.isInteger(id) || id < 1 || !['APROBADA', 'RECHAZADA'].includes(estado)) {
+            throw createError(400, 'Seleccione una asignación y un estado válidos');
         }
-        if (inst.OCUPADOS >= inst.CUPOS_DISPONIBLES) {
-            throw createError(400, `Bloqueo de cupos: La institución ya alcanzó el límite máximo (${inst.CUPOS_DISPONIBLES})`);
-        }
-
-        // Insertar en ASIGNACION poblando tanto ID_USUARIO como ID_ESTUDIANTE para compatibilidad total con el esquema Oracle
-        const insertSql = `
-            INSERT INTO ASIGNACION (
-                ID_ASIGNACION, ID_USUARIO, ID_ESTUDIANTE, ID_TUTOR, ID_PRACTICA, ID_INSTITUCION,
-                HORAS_ACUMULADAS, ESTADO, ESTADO_PRACTICA, FECHA_ASIGNACION
-            )
-            VALUES (
-                (SELECT NVL(MAX(ID_ASIGNACION), 0) + 1 FROM ASIGNACION),
-                :idEstudiante, :idEstudiante, :idTutor, :idPractica, :idInstitucion,
-                0.0, 'APROBADA', 'EN_CURSO', SYSDATE
-            )
-        `;
-        try {
-            await executeQuery(insertSql, {
-                idEstudiante: Number(id_estudiante),
-                idTutor: id_tutor ? Number(id_tutor) : null,
-                idPractica: Number(id_practica),
-                idInstitucion: idInst,
-            });
-        } catch (errInsert) {
-            // Si la columna ID_USUARIO o ESTADO no existiera en alguna versión alterna del esquema (ORA-00904), reintentar sin ella
-            if (errInsert.message && errInsert.message.includes('ORA-00904')) {
-                const fallbackSql = `
-                    INSERT INTO ASIGNACION (
-                        ID_ASIGNACION, ID_ESTUDIANTE, ID_TUTOR, ID_PRACTICA, ID_INSTITUCION,
-                        HORAS_ACUMULADAS, ESTADO_PRACTICA, FECHA_ASIGNACION
-                    )
-                    VALUES (
-                        (SELECT NVL(MAX(ID_ASIGNACION), 0) + 1 FROM ASIGNACION),
-                        :idEstudiante, :idTutor, :idPractica, :idInstitucion,
-                        0.0, 'EN_CURSO', SYSDATE
-                    )
-                `;
-                await executeQuery(fallbackSql, {
-                    idEstudiante: Number(id_estudiante),
-                    idTutor: id_tutor ? Number(id_tutor) : null,
-                    idPractica: Number(id_practica),
-                    idInstitucion: idInst,
-                });
-            } else {
-                throw errInsert;
-            }
-        }
-
-        res.json({ success: true, message: 'Estudiante asignado formalmente a la institución y práctica' });
+        const result = await executeQuery(`
+            UPDATE ASIGNACION SET ESTADO = :estado, ESTADO_APROBACION = :aprobacion, ESTADO_PRACTICA = :estadoPractica
+            WHERE ID_ASIGNACION = :id AND ESTADO_APROBACION = 'PENDIENTE' AND ESTADO_PRACTICA = 'PENDIENTE'
+        `, { id, estado, aprobacion: estado, estadoPractica: estado === 'APROBADA' ? 'EN_CURSO' : 'RECHAZADA' });
+        if (!result.rowsAffected) throw createError(409, 'La asignación ya fue revisada o no existe');
+        res.json({ success: true, message: 'Asignación actualizada' });
     } catch (err) { next(err); }
 }
 
@@ -783,9 +664,8 @@ module.exports = {
     getKpis,
     getPracticas,
     getInstituciones,
-    getUsuarios,
-    nuevoUsuario,
-    cambiarEstadoUsuario,
+    getEstudiantes,
+    aprobarAsignacion,
     getAsignaciones,
     cambiarEstado,
     nuevaPractica,

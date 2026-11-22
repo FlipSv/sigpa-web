@@ -34,12 +34,15 @@ async function runSetup() {
         // Alter tables para sincronizar columnas si faltan
         const alterStatements = [
             `ALTER TABLE USUARIO MODIFY (CONTRASENA VARCHAR2(255))`,
+            `ALTER TABLE USUARIO ADD (SEMESTRE NUMBER CHECK (SEMESTRE IN (1, 2, 3)))`,
             `ALTER TABLE PRACTICA ADD (DESCRIPCION VARCHAR2(500))`,
             `ALTER TABLE INSTITUCION ADD (FECHA_VENC_CONVENIO DATE)`,
+            `ALTER TABLE PRACTICA ADD (ID_INSTITUCION NUMBER(10) REFERENCES INSTITUCION(ID_INSTITUCION))`,
             `ALTER TABLE ASIGNACION MODIFY (ID_USUARIO NULL)`,
             `ALTER TABLE ASIGNACION ADD (ID_ESTUDIANTE NUMBER(10))`,
             `ALTER TABLE ASIGNACION ADD (ID_TUTOR NUMBER(10))`,
             `ALTER TABLE ASIGNACION ADD (ESTADO_PRACTICA VARCHAR2(20) DEFAULT 'EN_CURSO')`,
+            `ALTER TABLE ASIGNACION ADD (ESTADO_APROBACION VARCHAR2(20) DEFAULT 'APROBADA')`,
             `ALTER TABLE ASIGNACION ADD (FECHA_ASIGNACION DATE)`,
             `ALTER TABLE BITACORA ADD (HORAS_SESION NUMBER(5,2) DEFAULT 16)`,
             `ALTER TABLE BITACORA ADD (URL_EVIDENCIA VARCHAR2(200))`,
@@ -62,6 +65,24 @@ async function runSetup() {
                 }
             }
         }
+
+        try {
+            await executeQuery(`CREATE UNIQUE INDEX UQ_TUTOR_SEMESTRE ON USUARIO (
+                CASE WHEN ROL = 'TUTOR' THEN SEMESTRE END
+            )`);
+        } catch (err) {
+            if (!err.message.includes('ORA-00955') && !err.message.includes('ORA-01408')) throw err;
+        }
+
+        // Vincular prácticas históricas cuando todas sus asignaciones apuntan a la misma institución.
+        await executeQuery(`
+            UPDATE PRACTICA p SET ID_INSTITUCION = (
+                SELECT MIN(a.ID_INSTITUCION) FROM ASIGNACION a WHERE a.ID_PRACTICA = p.ID_PRACTICA
+            )
+            WHERE p.ID_INSTITUCION IS NULL AND 1 = (
+                SELECT COUNT(DISTINCT a.ID_INSTITUCION) FROM ASIGNACION a WHERE a.ID_PRACTICA = p.ID_PRACTICA
+            )
+        `);
 
         // Sincronizar bidireccionalmente ID_ESTUDIANTE e ID_USUARIO
         try {

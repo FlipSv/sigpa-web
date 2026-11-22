@@ -361,6 +361,10 @@ body {
 }
 .sidebar::-webkit-scrollbar { display: none; }
 
+.sidebar-toggle,
+.sidebar-close,
+.sidebar-backdrop { display: none; }
+
 .sidebar-header {
     padding: 22px 20px 16px;
     border-bottom: 1px solid rgba(255,255,255,.07);
@@ -525,7 +529,7 @@ body {
     display: flex;
     flex-direction: column;
     min-width: 0;
-    overflow-x: hidden;
+    overflow-x: clip;
 }
 
 /* ── Topbar ─────────────────────────────────────────────────────────── */
@@ -1266,8 +1270,11 @@ table.data-table tbody tr:hover { background: #f8fafc; }
     border-radius: var(--r-xl);
     width: 100%;
     max-width: 540px;
+    max-height: calc(100vh - 40px);
+    max-height: calc(100dvh - 40px);
     box-shadow: var(--shadow-xl);
-    overflow: hidden;
+    overflow: auto;
+    overscroll-behavior: contain;
     animation: fadeSlideUp .25s ease both;
 }
 
@@ -1310,6 +1317,7 @@ table.data-table tbody tr:hover { background: #f8fafc; }
     background: #f8fafc;
     border-top: 1px solid var(--border);
     display: flex;
+    flex-wrap: wrap;
     justify-content: flex-end;
     gap: 10px;
 }
@@ -1469,51 +1477,73 @@ table.data-table tbody tr:hover { background: #f8fafc; }
 }
 
 @media (max-width: 900px) {
-    .sidebar           { width: 200px; }
-    .kpi-row           { grid-template-columns: repeat(2,1fr); }
-    .topbar            { padding: 0 16px; gap: 10px; }
+    body.sidebar-open { overflow: hidden; }
+    .sidebar {
+        display: none;
+        position: fixed;
+        inset: 0 auto 0 0;
+        z-index: 201;
+        width: min(var(--sidebar-w), 85vw);
+        height: 100vh;
+        height: 100dvh;
+        overscroll-behavior: contain;
+    }
+    .sidebar.is-open { display: flex; }
+    .sidebar-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .sidebar-backdrop:not([hidden]) {
+        display: block;
+        position: fixed;
+        inset: 0;
+        z-index: 200;
+        background: rgba(15,23,42,.6);
+    }
+    .sidebar-toggle,
+    .sidebar-close {
+        display: grid;
+        place-items: center;
+        flex: 0 0 44px;
+        width: 44px;
+        height: 44px;
+        border-radius: var(--r-sm);
+        border: 1px solid var(--border);
+        background: #fff;
+        color: var(--text-main);
+        cursor: pointer;
+    }
+    .sidebar-close { font-size: 23px; }
+    .sidebar .nav-item,
+    .sidebar .btn-logout-icon { min-height: 44px; }
+    .kpi-row           { grid-template-columns: repeat(2,minmax(0,1fr)); }
+    .topbar            { height: auto; min-height: var(--topbar-h); padding: 8px 16px; gap: 10px; }
     .topbar-search     { display: none; }
     .content-area      { padding: 18px; }
+    .chart-row-2col,
+    .bottom-row { grid-template-columns: minmax(0,1fr); }
 }
 
 @media (max-width: 640px) {
-    .mobile-nav-toggle {
-        display: inline-flex;
-    }
-    .topbar-left {
-        display: flex;
-        align-items: center;
-    }
-    .sidebar {
-        position: fixed !important;
-        top: 0;
-        left: -280px;
-        bottom: 0;
-        width: 260px;
-        height: 100vh;
-        z-index: 1000;
-        display: flex !important;
-        flex-direction: column;
-        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
-        transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    }
-    .sidebar.open,
-    .sidebar.active {
-        left: 0 !important;
-    }
-    .topbar {
-        padding: 0 12px;
-        gap: 8px;
-    }
-    .topbar-period {
-        display: none;
-    }
-    .topbar-user-info {
-        display: none;
-    }
-    .kpi-row           { grid-template-columns: 1fr; }
+    .kpi-row           { grid-template-columns: minmax(0,1fr); }
     .kpi-value         { font-size: 24px; }
-    .content-area      { padding: 14px; }
+    .content-area      { padding: 12px; }
+    .topbar            { flex-wrap: wrap; padding-inline: 12px; }
+    .topbar-left       { flex: 1 1 220px; }
+    .topbar-actions    { flex-wrap: wrap; min-width: 0; max-width: 100%; }
+    .topbar-period,
+    .topbar-badge,
+    .topbar-user-info  { display: none; }
+    .topbar-icon-btn   { min-width: 44px; min-height: 44px; }
+    .topbar-title h1   { overflow-wrap: anywhere; }
+    .card-header,
+    .table-card-header,
+    .table-card-actions,
+    .chart-card-header { flex-wrap: wrap; gap: 8px; }
+    .modal-overlay { padding: 12px; }
+    .modal-content { max-height: calc(100dvh - 24px); }
+    .modal-header,
+    .modal-body,
+    .modal-footer { padding-inline: 16px; }
+    .modal-body .input-wrapper :is(input, select, textarea),
+    .content-area .input-wrapper :is(input, select, textarea) { font-size: 16px; }
 }
 
 /* =====================================================================
@@ -1791,7 +1821,7 @@ table.data-table tbody tr:hover { background: #f8fafc; }
 /* ── 3. PORTAFOLIO DIGITAL DE EVIDENCIAS ────────────────────────────── */
 .evidence-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
     gap: 18px;
     margin-top: 18px;
 }
@@ -1933,7 +1963,7 @@ table.data-table tbody tr:hover { background: #f8fafc; }
 
 .timeline-eval-block {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
     gap: 14px;
     margin-top: 16px;
     padding-top: 14px;
