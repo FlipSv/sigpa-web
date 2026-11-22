@@ -27,4 +27,17 @@ router.post('/asignar', directorController.asignarEstudiante);
 
 router.post('/aprobar_asignacion', directorController.aprobarAsignacion);
 
+// CU-10: Configuración y Consulta Curricular de Preguntas Guía
+router.post('/preguntas-guia', directorController.guardarPreguntasGuia);
+router.post('/preguntas_guia', directorController.guardarPreguntasGuia);
+router.get('/preguntas-guia', directorController.getPreguntasGuiaDirector);
+router.get('/preguntas_guia', directorController.getPreguntasGuiaDirector);
+router.get('/preguntas-guia/:id_practica/:visita', directorController.getPreguntasGuiaDirector);
+
+// CU-14 / CU-15: Cierre de Práctica y Emisión de Acta
+router.post('/cerrar-practica', directorController.cerrarPractica);
+router.post('/cerrar_practica', directorController.cerrarPractica);
+router.post('/cerrar-asignacion', directorController.cerrarPractica);
+router.post('/cerrar_asignacion', directorController.cerrarPractica);
+
 module.exports = router;

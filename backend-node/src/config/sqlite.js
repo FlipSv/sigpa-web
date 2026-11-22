@@ -33,15 +33,14 @@ try {
 }
 
 let dbInstance = null;
-const dbFilePath = process.env.SQLITE_DB_PATH
-    ? path.resolve(process.cwd(), process.env.SQLITE_DB_PATH)
-    : path.resolve(__dirname, '../../sigpa.db');
 
 /**
- * Obtiene la ruta del archivo de base de datos SQLite
+ * Obtiene la ruta del archivo de base de datos SQLite dinámicamente
  */
 function getDbPath() {
-    return dbFilePath;
+    return process.env.SQLITE_DB_PATH
+        ? path.resolve(process.cwd(), process.env.SQLITE_DB_PATH)
+        : path.resolve(__dirname, '../../sigpa.db');
 }
 
 /**
@@ -100,10 +99,26 @@ function registerOracleCompatibilityFunctions(db) {
 }
 
 /**
+ * Verifica y agrega una columna si no existe en una tabla SQLite
+ */
+function ensureColumnExists(db, table, column, colDef) {
+    try {
+        const cols = db.prepare(`PRAGMA table_info(${table})`).all();
+        if (!cols.some(c => c.name.toUpperCase() === column.toUpperCase())) {
+            db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${colDef}`);
+        }
+    } catch (e) {
+        // La tabla puede no existir todavía
+    }
+}
+
+/**
  * Inicializa el esquema DDL y vistas de compatibilidad
  */
 function initSchema(db) {
     db.exec(`
+        PRAGMA journal_mode = WAL;
+        PRAGMA busy_timeout = 5000;
         PRAGMA foreign_keys = ON;
 
         -- Tabla de versión simulada (v$version)
@@ -135,9 +150,9 @@ function initSchema(db) {
             ACTIVO TEXT DEFAULT 'S' CHECK (ACTIVO IN ('S', 'N'))
         );
 
-        -- 2. Tabla PRACTICA
-        CREATE TABLE IF NOT EXISTS PRACTICA (
-            ID_PRACTICA INTEGER PRIMARY KEY,
+        -- 2. Tabla MODALIDAD
+        CREATE TABLE IF NOT EXISTS MODALIDAD (
+            ID_MODALIDAD INTEGER PRIMARY KEY,
             NOMBRE TEXT NOT NULL,
             SEMESTRE INTEGER NOT NULL DEFAULT 1 CHECK (SEMESTRE IN (1, 2, 3)),
             TIPO TEXT DEFAULT 'OBSERVACION',
@@ -157,13 +172,26 @@ function initSchema(db) {
             FECHA_VENC_CONVENIO TEXT
         );
 
-        -- 4. Tabla ASIGNACION
+        -- 4. Tabla PRACTICA
+        CREATE TABLE IF NOT EXISTS PRACTICA (
+            ID_PRACTICA INTEGER PRIMARY KEY,
+            NOMBRE TEXT NOT NULL,
+            SEMESTRE INTEGER DEFAULT 1,
+            TIPO TEXT DEFAULT 'OBSERVACION',
+            ID_MODALIDAD INTEGER,
+            HORAS_REQUERIDAS INTEGER DEFAULT 64,
+            ESTADO TEXT DEFAULT 'ABIERTA' CHECK (ESTADO IN ('ABIERTA', 'CERRADA')),
+            DESCRIPCION TEXT,
+            FOREIGN KEY (ID_MODALIDAD) REFERENCES MODALIDAD(ID_MODALIDAD)
+        );
+
+        -- 5. Tabla ASIGNACION (Vinculación formal de estudiantes)
         CREATE TABLE IF NOT EXISTS ASIGNACION (
             ID_ASIGNACION INTEGER PRIMARY KEY,
             ID_USUARIO INTEGER,
             ID_ESTUDIANTE INTEGER,
             ID_TUTOR INTEGER,
-            ID_PRACTICA INTEGER,
+            ID_PRACTICA INTEGER NOT NULL,
             ID_INSTITUCION INTEGER,
             HORAS_ACUMULADAS REAL DEFAULT 0,
             ESTADO TEXT DEFAULT 'APROBADA',
@@ -171,11 +199,12 @@ function initSchema(db) {
             ESTADO_PRACTICA TEXT DEFAULT 'EN_CURSO',
             FECHA_ASIGNACION TEXT,
             FOREIGN KEY (ID_ESTUDIANTE) REFERENCES USUARIO(ID_USUARIO),
+            FOREIGN KEY (ID_TUTOR) REFERENCES USUARIO(ID_USUARIO),
             FOREIGN KEY (ID_PRACTICA) REFERENCES PRACTICA(ID_PRACTICA),
             FOREIGN KEY (ID_INSTITUCION) REFERENCES INSTITUCION(ID_INSTITUCION)
         );
 
-        -- 5. Tabla BITACORA
+        -- 6. Tabla BITACORA
         CREATE TABLE IF NOT EXISTS BITACORA (
             ID_BITACORA INTEGER PRIMARY KEY,
             ID_ASIGNACION INTEGER NOT NULL,
@@ -189,7 +218,22 @@ function initSchema(db) {
             FOREIGN KEY (ID_ASIGNACION) REFERENCES ASIGNACION(ID_ASIGNACION)
         );
 
-        -- 6. Tabla EVALUACION
+        -- 7. Tabla VISITA (Planificación y seguimiento de visitas pedagógicas)
+        CREATE TABLE IF NOT EXISTS VISITA (
+            ID_VISITA INTEGER PRIMARY KEY,
+            ID_ASIGNACION INTEGER,
+            ID_PRACTICA INTEGER,
+            NUMERO_VISITA INTEGER NOT NULL,
+            FECHA_PROGRAMADA TEXT,
+            FECHA_REALIZADA TEXT,
+            ESTADO TEXT DEFAULT 'PROGRAMADA' CHECK (ESTADO IN ('PROGRAMADA', 'REALIZADA', 'CANCELADA')),
+            TIPO_VISITA TEXT DEFAULT 'SEGUIMIENTO',
+            OBSERVACIONES TEXT,
+            FOREIGN KEY (ID_ASIGNACION) REFERENCES ASIGNACION(ID_ASIGNACION),
+            FOREIGN KEY (ID_PRACTICA) REFERENCES PRACTICA(ID_PRACTICA)
+        );
+
+        -- 8. Tabla EVALUACION
         CREATE TABLE IF NOT EXISTS EVALUACION (
             ID_EVALUACION INTEGER PRIMARY KEY,
             ID_BITACORA INTEGER NOT NULL,
@@ -202,23 +246,49 @@ function initSchema(db) {
             FOREIGN KEY (ID_EVALUADOR) REFERENCES USUARIO(ID_USUARIO)
         );
 
-        -- 7. Tablas de Preguntas Pedagógicas
+        -- 9. Tabla EVIDENCIA (Portafolio digital de evidencias didácticas)
+        CREATE TABLE IF NOT EXISTS EVIDENCIA (
+            ID_EVIDENCIA INTEGER PRIMARY KEY,
+            ID_BITACORA INTEGER,
+            NUMERO_VISITA INTEGER DEFAULT 1,
+            NOMBRE_ARCHIVO TEXT,
+            RUTA_ARCHIVO TEXT NOT NULL,
+            TIPO_FORMATO TEXT DEFAULT 'PDF',
+            FECHA_CARGA TEXT,
+            FOREIGN KEY (ID_BITACORA) REFERENCES BITACORA(ID_BITACORA)
+        );
+
+        -- 10. Tablas de Preguntas Pedagógicas (PREGUNTA y PREGUNTA_GUIA)
         CREATE TABLE IF NOT EXISTS PREGUNTA (
             ID_PREGUNTA INTEGER PRIMARY KEY,
             ID_PRACTICA INTEGER DEFAULT 1,
             NUMERO_VISITA INTEGER DEFAULT 1,
             TEXTO_PREGUNTA TEXT NOT NULL,
-            ORDEN INTEGER DEFAULT 1
+            CATEGORIA TEXT DEFAULT 'PEDAGOGICA',
+            ORDEN INTEGER DEFAULT 1,
+            FOREIGN KEY (ID_PRACTICA) REFERENCES PRACTICA(ID_PRACTICA)
         );
 
         CREATE TABLE IF NOT EXISTS PREGUNTA_GUIA (
             ID_PREGUNTA INTEGER PRIMARY KEY,
+            ID_PREGUNTA_GUIA INTEGER,
             ID_PRACTICA INTEGER DEFAULT 1,
+            ID_MODALIDAD INTEGER,
             NUMERO_VISITA INTEGER DEFAULT 1,
             TEXTO_PREGUNTA TEXT NOT NULL,
-            ORDEN INTEGER DEFAULT 1
+            CATEGORIA TEXT DEFAULT 'PEDAGOGICA',
+            ORDEN INTEGER DEFAULT 1,
+            FOREIGN KEY (ID_PRACTICA) REFERENCES PRACTICA(ID_PRACTICA),
+            FOREIGN KEY (ID_MODALIDAD) REFERENCES MODALIDAD(ID_MODALIDAD)
         );
     `);
+
+    // Migraciones seguras para bases de datos existentes
+    ensureColumnExists(db, 'PREGUNTA', 'CATEGORIA', "TEXT DEFAULT 'PEDAGOGICA'");
+    ensureColumnExists(db, 'PREGUNTA_GUIA', 'CATEGORIA', "TEXT DEFAULT 'PEDAGOGICA'");
+    ensureColumnExists(db, 'PREGUNTA_GUIA', 'ID_PREGUNTA_GUIA', "INTEGER");
+    ensureColumnExists(db, 'PREGUNTA_GUIA', 'ID_MODALIDAD', "INTEGER");
+    ensureColumnExists(db, 'PRACTICA', 'ID_MODALIDAD', "INTEGER");
 }
 
 /**
@@ -226,21 +296,32 @@ function initSchema(db) {
  * todos los roles, pantallas y flujos inmediatamente.
  */
 function seedInitialData(db) {
-    const userCount = db.prepare('SELECT COUNT(*) AS CNT FROM USUARIO').get().CNT;
-    if (userCount > 0) {
-        return; // Ya contiene datos
-    }
-
-    console.log('[MOCK-DB] Sembrando datos iniciales de prueba en SQLite...');
+    console.log('[MOCK-DB] Verificando y sembrando datos iniciales en SQLite...');
 
     // Contraseña estándar '1234' cifrada con bcrypt
     const passHash = bcrypt.hashSync('1234', 10);
 
     // 1. Usuarios
-    const insertUsuario = db.prepare(`
-        INSERT INTO USUARIO (ID_USUARIO, NOMBRE, APELLIDO, EMAIL, CONTRASENA, ROL, ACTIVO)
-        VALUES (:id, :nombre, :apellido, :email, :contrasena, :rol, 'S')
-    `);
+    const userCount = db.prepare('SELECT COUNT(*) AS CNT FROM USUARIO').get().CNT;
+    if (userCount === 0) {
+        const insertUsuario = db.prepare(`
+            INSERT INTO USUARIO (ID_USUARIO, NOMBRE, APELLIDO, EMAIL, CONTRASENA, ROL, ACTIVO)
+            VALUES (:id, :nombre, :apellido, :email, :contrasena, :rol, 'S')
+        `);
+
+        const usuarios = [
+            { id: 1, nombre: 'Ana', apellido: 'Martínez (Directora)', email: 'director@sigpa.edu', contrasena: passHash, rol: 'DIRECTOR' },
+            { id: 2, nombre: 'Carlos', apellido: 'Coordinador (Tutor)', email: 'coord@sigpa.edu', contrasena: passHash, rol: 'COORDINADOR' },
+            { id: 3, nombre: 'Laura', apellido: 'Pérez (Estudiante)', email: 'estudiante@sigpa.edu', contrasena: passHash, rol: 'ESTUDIANTE' },
+            { id: 4, nombre: 'Mateo', apellido: 'Gómez (Tutor)', email: 'tutor@sigpa.edu', contrasena: passHash, rol: 'TUTOR' },
+            { id: 5, nombre: 'Clara', apellido: 'Rojas (Asesora In Situ)', email: 'asesor@sigpa.edu', contrasena: passHash, rol: 'ASESOR' },
+            { id: 6, nombre: 'Andrés', apellido: 'Silva (Estudiante)', email: 'estudiante2@sigpa.edu', contrasena: passHash, rol: 'ESTUDIANTE' },
+        ];
+
+        for (const u of usuarios) {
+            insertUsuario.run(u);
+        }
+    }
 
     const usuarios = [
         { id: 1, nombre: 'Ana', apellido: 'Martínez (Directora)', email: 'director@sigpa.edu', contrasena: passHash, rol: 'DIRECTOR' },
@@ -251,15 +332,47 @@ function seedInitialData(db) {
         { id: 6, nombre: 'Andrés', apellido: 'Silva (Estudiante)', email: 'estudiante2@sigpa.edu', contrasena: passHash, rol: 'ESTUDIANTE' },
     ];
 
-    for (const u of usuarios) {
-        insertUsuario.run(u);
+    // 3. Prácticas Académicas
+    const pracCount = db.prepare('SELECT COUNT(*) AS CNT FROM PRACTICA').get().CNT;
+    if (pracCount === 0) {
+        const insertPractica = db.prepare(`
+            INSERT INTO PRACTICA (ID_PRACTICA, NOMBRE, SEMESTRE, TIPO, ID_MODALIDAD, HORAS_REQUERIDAS, ESTADO, DESCRIPCION)
+            VALUES (:id, :nombre, :semestre, :tipo, :idMod, :horas, 'ABIERTA', :descripcion)
+        `);
+
+        const practicas = [
+            { id: 1, nombre: 'Práctica de Observación en Infancia', semestre: 1, tipo: 'OBSERVACION', idMod: 1, horas: 64, descripcion: 'Observación diagnóstica en centros infantiles y jardines.' },
+            { id: 2, nombre: 'Práctica de Contextualización e Intervención Inicial', semestre: 2, tipo: 'INTERVENCION', idMod: 2, horas: 64, descripcion: 'Acompañamiento pedagógico formativo en aula.' },
+            { id: 3, nombre: 'Práctica Pedagógica y Didáctica Docente', semestre: 3, tipo: 'DOCENTE', idMod: 3, horas: 64, descripcion: 'Planificación de unidades didácticas y proyectos lúdicos.' },
+            { id: 4, nombre: 'Práctica de Investigación en Primera Infancia', semestre: 4, tipo: 'INVESTIGATIVA', idMod: 4, horas: 64, descripcion: 'Sistematización de experiencias y diario de campo.' },
+            { id: 5, nombre: 'Práctica Integral Comunitaria (Formato P5)', semestre: 5, tipo: 'INTERVENCION', idMod: 5, horas: 80, descripcion: 'Proyectos educativos comunitarios y familiares.' },
+            { id: 6, nombre: 'Práctica de Grado y Liderazgo Infantil (Formato P6)', semestre: 6, tipo: 'PROFESIONAL', idMod: 6, horas: 96, descripcion: 'Gestión integral pedagógica en instituciones oficiales y privadas.' },
+        ];
+
+        for (const p of practicas) {
+            insertPractica.run(p);
+        }
     }
 
-    // 2. Prácticas Académicas
-    const insertPractica = db.prepare(`
-        INSERT INTO PRACTICA (ID_PRACTICA, NOMBRE, SEMESTRE, TIPO, HORAS_REQUERIDAS, ESTADO, DESCRIPCION)
-        VALUES (:id, :nombre, :semestre, :tipo, :horas, 'ABIERTA', :descripcion)
-    `);
+    // 4. Instituciones Educativas con Convenio
+    const instCount = db.prepare('SELECT COUNT(*) AS CNT FROM INSTITUCION').get().CNT;
+    if (instCount === 0) {
+        const insertInstitucion = db.prepare(`
+            INSERT INTO INSTITUCION (ID_INSTITUCION, NOMBRE, DIRECCION, TELEFONO, CONVENIO_ACTIVO, CUPOS_DISPONIBLES, FECHA_VENC_CONVENIO)
+            VALUES (:id, :nombre, :direccion, :telefono, 'S', :cupos, :vencimiento)
+        `);
+
+        const instituciones = [
+            { id: 1, nombre: 'Colegio Integrado UDI Kids', direccion: 'Calle 9 # 23-45 Bucaramanga', telefono: '6076987654', cupos: 10, vencimiento: '2028-12-31' },
+            { id: 2, nombre: 'Jardín Infantil Pequeños Sabios', direccion: 'Carrera 27 # 45-12 Bucaramanga', telefono: '6076451234', cupos: 6, vencimiento: '2027-11-30' },
+            { id: 3, nombre: 'Centro Educativo San Francisco', direccion: 'Calle 34 # 19-20 Floridablanca', telefono: '6076328901', cupos: 8, vencimiento: '2028-06-15' },
+            { id: 4, nombre: 'Liceo Pedagógico El Prado', direccion: 'Carrera 33 # 52-10 Cabecera', telefono: '6076572211', cupos: 4, vencimiento: '2027-09-20' },
+        ];
+
+        for (const inst of instituciones) {
+            insertInstitucion.run(inst);
+        }
+    }
 
     const practicas = [
         { id: 1, nombre: 'Práctica de Observación en Infancia', semestre: 1, tipo: 'OBSERVACION', horas: 64, descripcion: 'Observación diagnóstica en centros infantiles y jardines.' },
@@ -267,25 +380,85 @@ function seedInitialData(db) {
         { id: 3, nombre: 'Práctica Pedagógica y Didáctica Docente', semestre: 3, tipo: 'DOCENTE', horas: 64, descripcion: 'Planificación de unidades didácticas y proyectos lúdicos.' },
     ];
 
-    for (const p of practicas) {
-        insertPractica.run(p);
+    // 6. Bitácoras
+    const bitCount = db.prepare('SELECT COUNT(*) AS CNT FROM BITACORA').get().CNT;
+    if (bitCount === 0) {
+        const insertBitacora = db.prepare(`
+            INSERT INTO BITACORA (ID_BITACORA, ID_ASIGNACION, NUMERO_VISITA, FECHA_REGISTRO, HORAS_SESION, ACTIVIDADES, OBSERVACIONES, URL_EVIDENCIA, ESTADO_REVISION)
+            VALUES (:id, :idAsignacion, :visita, :fecha, :horas, :actividades, :observaciones, :evidencia, :estado)
+        `);
+
+        insertBitacora.run({
+            id: 1,
+            idAsignacion: 1,
+            visita: 1,
+            fecha: '2026-08-15',
+            horas: 16.0,
+            actividades: '[FASE 1 - INICIO / MOTIVACIÓN]:\nPresentación ante el grupo con dinámica de títeres y bienvenida afectiva.\n\n[FASE 2 - DESARROLLO EN AULA]:\nObservación y registro de dinámicas de interacción grupal, motricidad y juego libre.\n\n[FASE 3 - CIERRE Y EVALUACIÓN FORMATIVA]:\nRonda de preguntas formativas y dibujo colectivo de los aprendizajes alcanzados.',
+            observaciones: '[REFLEXIÓN PEDAGÓGICA DOCENTE]:\nLos niños mostraron alta motivación; se requiere reforzar tiempos en la transición de actividades.',
+            evidencia: 'https://drive.google.com/drive/folders/evidencia_visita_1_udi',
+            estado: 'CALIFICADA',
+        });
     }
 
-    // 3. Instituciones Educativas con Convenio
-    const insertInstitucion = db.prepare(`
-        INSERT INTO INSTITUCION (ID_INSTITUCION, NOMBRE, DIRECCION, TELEFONO, CONVENIO_ACTIVO, CUPOS_DISPONIBLES, FECHA_VENC_CONVENIO)
-        VALUES (:id, :nombre, :direccion, :telefono, 'S', :cupos, :vencimiento)
-    `);
+    // 7. Visitas
+    const visCount = db.prepare('SELECT COUNT(*) AS CNT FROM VISITA').get().CNT;
+    if (visCount === 0) {
+        const insertVisita = db.prepare(`
+            INSERT INTO VISITA (ID_VISITA, ID_ASIGNACION, ID_PRACTICA, NUMERO_VISITA, FECHA_PROGRAMADA, FECHA_REALIZADA, ESTADO, TIPO_VISITA, OBSERVACIONES)
+            VALUES (:id, :idAsignacion, :idPractica, :visita, :prog, :real, :estado, :tipo, :obs)
+        `);
+        insertVisita.run({
+            id: 1,
+            idAsignacion: 1,
+            idPractica: 1,
+            visita: 1,
+            prog: '2026-08-15',
+            real: '2026-08-15',
+            estado: 'REALIZADA',
+            tipo: 'INICIAL',
+            obs: 'Primera visita de diagnóstico y observación de aula.',
+        });
+        insertVisita.run({
+            id: 2,
+            idAsignacion: 1,
+            idPractica: 1,
+            visita: 2,
+            prog: '2026-09-01',
+            real: null,
+            estado: 'PROGRAMADA',
+            tipo: 'SEGUIMIENTO',
+            obs: 'Segunda visita de acompañamiento y revisión de momentos didácticos.',
+        });
+    }
 
-    const instituciones = [
-        { id: 1, nombre: 'Colegio Integrado UDI Kids', direccion: 'Calle 9 # 23-45 Bucaramanga', telefono: '6076987654', cupos: 10, vencimiento: '2028-12-31' },
-        { id: 2, nombre: 'Jardín Infantil Pequeños Sabios', direccion: 'Carrera 27 # 45-12 Bucaramanga', telefono: '6076451234', cupos: 6, vencimiento: '2027-11-30' },
-        { id: 3, nombre: 'Centro Educativo San Francisco', direccion: 'Calle 34 # 19-20 Floridablanca', telefono: '6076328901', cupos: 8, vencimiento: '2028-06-15' },
-        { id: 4, nombre: 'Liceo Pedagógico El Prado', direccion: 'Carrera 33 # 52-10 Cabecera', telefono: '6076572211', cupos: 4, vencimiento: '2027-09-20' },
-    ];
+    // 8. Evaluaciones
+    const evalCount = db.prepare('SELECT COUNT(*) AS CNT FROM EVALUACION').get().CNT;
+    if (evalCount === 0) {
+        const insertEvaluacion = db.prepare(`
+            INSERT INTO EVALUACION (ID_EVALUACION, ID_BITACORA, ID_EVALUADOR, TIPO_EVALUADOR, NOTA, COMENTARIOS, FECHA_EVALUACION)
+            VALUES (:id, :idBitacora, :idEvaluador, :tipo, :nota, :comentarios, :fecha)
+        `);
 
-    for (const inst of instituciones) {
-        insertInstitucion.run(inst);
+        insertEvaluacion.run({
+            id: 1,
+            idBitacora: 1,
+            idEvaluador: 2,
+            tipo: 'TUTOR',
+            nota: 4.8,
+            comentarios: 'Excelente registro pedagógico y análisis reflexivo de la primera sesión.',
+            fecha: '2026-08-16 10:00:00',
+        });
+
+        insertEvaluacion.run({
+            id: 2,
+            idBitacora: 1,
+            idEvaluador: 5,
+            tipo: 'ASESOR',
+            nota: 4.6,
+            comentarios: 'Acompañamiento pedagógico presencial verificado y acorde con el plan de práctica.',
+            fecha: '2026-08-17 11:30:00',
+        });
     }
 
     // 4. Asignaciones
@@ -311,22 +484,10 @@ function seedInitialData(db) {
         VALUES (:id, :idAsignacion, :visita, :fecha, :horas, :actividades, :observaciones, :evidencia, :estado)
     `);
 
-    insertBitacora.run({
-        id: 1,
-        idAsignacion: 1,
-        visita: 1,
-        fecha: '2026-08-15',
-        horas: 16.0,
-        actividades: '[FASE 1 - INICIO / MOTIVACIÓN]:\nPresentación ante el grupo con dinámica de títeres y bienvenida afectiva.\n\n[FASE 2 - DESARROLLO EN AULA]:\nObservación y registro de dinámicas de interacción grupal, motricidad y juego libre.\n\n[FASE 3 - CIERRE Y EVALUACIÓN FORMATIVA]:\nRonda de preguntas formativas y dibujo colectivo de los aprendizajes alcanzados.',
-        observaciones: '[REFLEXIÓN PEDAGÓGICA DOCENTE]:\nLos niños mostraron alta motivación; se requiere reforzar tiempos en la transición de actividades.',
-        evidencia: 'https://drive.google.com/drive/folders/evidencia_visita_1_udi',
-        estado: 'CALIFICADA',
-    });
-
-    // 6. Evaluaciones
-    const insertEvaluacion = db.prepare(`
-        INSERT INTO EVALUACION (ID_EVALUACION, ID_BITACORA, ID_EVALUADOR, TIPO_EVALUADOR, NOTA, COMENTARIOS, FECHA_EVALUACION)
-        VALUES (:id, :idBitacora, :idEvaluador, :tipo, :nota, :comentarios, :fecha)
+    // 10. Banco de Preguntas Guía Pedagógicas (PREGUNTA y PREGUNTA_GUIA)
+    const insertPregunta = db.prepare(`
+        INSERT OR IGNORE INTO PREGUNTA (ID_PREGUNTA, ID_PRACTICA, NUMERO_VISITA, TEXTO_PREGUNTA, CATEGORIA, ORDEN)
+        VALUES (:id, :idPractica, :visita, :texto, :categoria, :orden)
     `);
 
     insertEvaluacion.run({
@@ -355,19 +516,49 @@ function seedInitialData(db) {
         VALUES (:id, :idPractica, :visita, :texto, :orden)
     `);
 
-    const preguntas = [
-        { id: 1, idPractica: 1, visita: 1, texto: '¿Cómo caracterizarías el ambiente socioemocional del aula en esta primera visita?', orden: 1 },
-        { id: 2, idPractica: 1, visita: 1, texto: '¿Qué estrategias utilizó la docente para captar la atención de los infantes?', orden: 2 },
-        { id: 3, idPractica: 1, visita: 2, texto: '¿Qué recursos didácticos facilitaron el aprendizaje activo en la sesión?', orden: 1 },
-        { id: 4, idPractica: 1, visita: 2, texto: '¿Cómo se integraron las actividades motrices en el plan curricular?', orden: 2 },
+    const bancoPreguntas = [
+        // Visita 1
+        { id: 1, idPractica: 1, idMod: 1, visita: 1, texto: '¿Cómo caracterizarías el ambiente socioemocional del aula en esta primera visita?', categoria: 'CONTEXTO', orden: 1 },
+        { id: 2, idPractica: 1, idMod: 1, visita: 1, texto: '¿Qué estrategias utilizó la docente para captar la atención de los infantes y fomentar la participación?', categoria: 'DIDACTICA', orden: 2 },
+        { id: 3, idPractica: 1, idMod: 1, visita: 1, texto: '¿Qué acuerdos pedagógicos de convivencia facilitaron el desarrollo armónico de la jornada?', categoria: 'CONVIVENCIA', orden: 3 },
+        // Visita 2
+        { id: 4, idPractica: 1, idMod: 1, visita: 2, texto: '¿Qué recursos didácticos y lúdicos facilitaron el aprendizaje activo en la sesión?', categoria: 'RECURSOS', orden: 1 },
+        { id: 5, idPractica: 1, idMod: 1, visita: 2, texto: '¿Cómo se integraron las actividades motrices y de expresión corporal en el plan curricular?', categoria: 'CURRICULO', orden: 2 },
+        { id: 6, idPractica: 1, idMod: 1, visita: 2, texto: '¿De qué manera se retroalimentó el trabajo cooperativo de los niños durante el cierre formativo?', categoria: 'EVALUACION', orden: 3 },
+        // Visita 3
+        { id: 7, idPractica: 1, idMod: 1, visita: 3, texto: '¿Cómo se articularon los tres momentos pedagógicos (inicio, desarrollo y cierre) con el objetivo de aprendizaje?', categoria: 'PLANEACION', orden: 1 },
+        { id: 8, idPractica: 1, idMod: 1, visita: 3, texto: '¿Qué adaptaciones o mediaciones se implementaron para atender la diversidad y necesidades individuales?', categoria: 'INCLUSION', orden: 2 },
+        // Visita 4
+        { id: 9, idPractica: 1, idMod: 1, visita: 4, texto: '¿Qué impacto formativo y transformador tuvo la intervención pedagógica en el grupo de infantes?', categoria: 'IMPACTO', orden: 1 },
+        { id: 10, idPractica: 1, idMod: 1, visita: 4, texto: '¿Cuáles son las reflexiones docentes y oportunidades de mejora para la futura labor profesional?', categoria: 'SISTEMATIZACION', orden: 2 },
     ];
 
-    for (const q of preguntas) {
-        insertPregunta.run(q);
-        db.prepare('INSERT INTO PREGUNTA_GUIA (ID_PREGUNTA, ID_PRACTICA, NUMERO_VISITA, TEXTO_PREGUNTA, ORDEN) VALUES (:id, :idPractica, :visita, :texto, :orden)').run(q);
-    }
+        for (const q of bancoPreguntas) {
+            insertPregunta.run({
+                id: q.id,
+                idPractica: q.idPractica,
+                visita: q.visita,
+                texto: q.texto,
+                categoria: q.categoria,
+                orden: q.orden,
+            });
+            insertPreguntaGuia.run({
+                id: q.id,
+                idPractica: q.idPractica,
+                idMod: q.idMod,
+                visita: q.visita,
+                texto: q.texto,
+                categoria: q.categoria,
+                orden: q.orden,
+            });
+        }
 
-    console.log('[MOCK-DB] ✔ Datos iniciales de prueba sembrados correctamente.');
+        try {
+            db.exec('UPDATE PREGUNTA_GUIA SET ID_PREGUNTA_GUIA = ID_PREGUNTA WHERE ID_PREGUNTA_GUIA IS NULL');
+            db.exec('UPDATE PREGUNTA_GUIA SET ID_MODALIDAD = ID_PRACTICA WHERE ID_MODALIDAD IS NULL');
+        } catch (e) {}
+
+    console.log('[MOCK-DB] ✔ Datos iniciales de prueba y 10 tablas normalizadas sincronizadas.');
 }
 
 function configureSemesters(db) {
@@ -493,7 +684,8 @@ async function initSqlite() {
         );
     }
 
-    const dir = path.dirname(dbFilePath);
+    const activeDbPath = getDbPath();
+    const dir = path.dirname(activeDbPath);
     if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
     }
@@ -501,9 +693,26 @@ async function initSqlite() {
     console.log('====================================================');
     console.log('  SIGPA — Modo Mock / Base de Datos SQLite Activa');
     console.log('====================================================');
-    console.log(`[MOCK-DB] Archivo local: ${dbFilePath}`);
+    console.log(`[MOCK-DB] Archivo local: ${activeDbPath}`);
 
-    dbInstance = new DatabaseSync(dbFilePath);
+    const isEphemeralTestDb = path.basename(activeDbPath).startsWith('sigpa_test_');
+    if (isEphemeralTestDb && fs.existsSync(activeDbPath)) {
+        try {
+            fs.unlinkSync(activeDbPath);
+            if (fs.existsSync(`${activeDbPath}-wal`)) fs.unlinkSync(`${activeDbPath}-wal`);
+            if (fs.existsSync(`${activeDbPath}-shm`)) fs.unlinkSync(`${activeDbPath}-shm`);
+        } catch (e) {
+            // Ignorar si el archivo está temporalmente en uso
+        }
+    }
+
+    dbInstance = new DatabaseSync(activeDbPath);
+    try {
+        dbInstance.exec('PRAGMA journal_mode = WAL;');
+        dbInstance.exec('PRAGMA busy_timeout = 5000;');
+    } catch (e) {
+        // Ignorar si en memoria
+    }
     registerOracleCompatibilityFunctions(dbInstance);
     initSchema(dbInstance);
     dbInstance.exec('BEGIN IMMEDIATE');
@@ -636,4 +845,5 @@ module.exports = {
     executeSqliteTransaction,
     getDbPath,
     translateSql,
+    filterBindsForSql,
 };

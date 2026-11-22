@@ -21,4 +21,10 @@ router.get('/bitacoras_pendientes', tutorController.getBitacoras);
 router.post('/calificar', tutorController.calificarBitacora);
 router.post('/aprobar_asignacion', tutorController.aprobarAsignacion);
 
+// CU-14 / CU-15: Cierre de Asignación por Tutor
+router.post('/cerrar-asignacion', tutorController.cerrarAsignacion);
+router.post('/cerrar_asignacion', tutorController.cerrarAsignacion);
+router.post('/cerrar-practica', tutorController.cerrarAsignacion);
+router.post('/cerrar_practica', tutorController.cerrarAsignacion);
+
 module.exports = router;

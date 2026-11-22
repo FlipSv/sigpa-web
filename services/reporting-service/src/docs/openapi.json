@@ -1,0 +1,294 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "SIGPA - Microservicio de Generación de Reportes y Documentos",
+    "description": "API RESTful desacoplada para la generación y almacenamiento de reportes de visita (CU-13) y actas formales de cierre de práctica (CU-14 / CU-15) en formato PDF para SIGPA.",
+    "version": "1.0.0",
+    "contact": {
+      "name": "Equipo de Desarrollo SIGPA - UDI",
+      "email": "soporte@udi.edu.co"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:5001/api/v1/reports",
+      "description": "Microservicio Directo de Reportes"
+    },
+    {
+      "url": "http://localhost:3000/api/v1/reports",
+      "description": "A través de API Gateway"
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Verificación del estado del servicio de reportes",
+        "operationId": "getReportingHealth",
+        "responses": {
+          "200": {
+            "description": "Servicio operando normalmente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/docs": {
+      "get": {
+        "summary": "Documentación OpenAPI de los endpoints de reportes",
+        "operationId": "getDocs",
+        "responses": {
+          "200": {
+            "description": "Especificación OpenAPI 3.0"
+          }
+        }
+      }
+    },
+    "/visita-pdf": {
+      "post": {
+        "summary": "Genera el informe formal de visita de seguimiento a práctica (CU-13)",
+        "operationId": "generateVisitaPdf",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VisitaPdfRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Documento PDF binario o metadatos de almacenamiento",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportMetadataResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos o incompletos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/acta-cierre-pdf": {
+      "post": {
+        "summary": "Genera el acta formal de cierre y culminación de práctica (CU-14 / CU-15)",
+        "operationId": "generateActaCierrePdf",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActaCierreRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Documento PDF binario o metadatos de almacenamiento",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportMetadataResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos o incompletos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/{id}": {
+      "get": {
+        "summary": "Recupera un reporte generado previamente desde el almacenamiento desacoplado",
+        "operationId": "getReportById",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Identificador único (UUID) del reporte",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Archivo PDF o metadatos del reporte almacenado",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportMetadataResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Reporte no encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "HealthResponse": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "example": "UP" },
+          "service": { "type": "string", "example": "reporting-service" },
+          "engine": { "type": "string", "example": "pdfkit" },
+          "timestamp": { "type": "string", "example": "2026-11-20T21:30:00.000Z" },
+          "totalReports": { "type": "integer", "example": 10 }
+        }
+      },
+      "VisitaPdfRequest": {
+        "type": "object",
+        "required": ["estudiante", "tutor", "institucion"],
+        "properties": {
+          "estudiante": {
+            "oneOf": [
+              { "type": "string" },
+              {
+                "type": "object",
+                "properties": {
+                  "nombre": { "type": "string" },
+                  "codigo": { "type": "string" }
+                }
+              }
+            ]
+          },
+          "tutor": {
+            "oneOf": [
+              { "type": "string" },
+              {
+                "type": "object",
+                "properties": {
+                  "nombre": { "type": "string" }
+                }
+              }
+            ]
+          },
+          "institucion": {
+            "oneOf": [
+              { "type": "string" },
+              {
+                "type": "object",
+                "properties": {
+                  "nombre": { "type": "string" }
+                }
+              }
+            ]
+          },
+          "asesor": { "type": "string" },
+          "fecha_visita": { "type": "string", "format": "date" },
+          "evaluacion": {
+            "type": "object",
+            "properties": {
+              "rubricas": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "criterio": { "type": "string" },
+                    "calificacion": { "type": "number" },
+                    "observacion": { "type": "string" }
+                  }
+                }
+              },
+              "observaciones": { "type": "string" },
+              "estado": { "type": "string" },
+              "nota": { "type": "number" }
+            }
+          }
+        }
+      },
+      "ActaCierreRequest": {
+        "type": "object",
+        "required": ["estudiante", "tutor", "institucion", "horas_cumplidas", "total_horas_requeridas", "nota_final"],
+        "properties": {
+          "estudiante": { "type": "string" },
+          "tutor": { "type": "string" },
+          "institucion": { "type": "string" },
+          "horas_cumplidas": { "type": "number", "example": 160 },
+          "total_horas_requeridas": { "type": "number", "example": 160 },
+          "nota_final": { "type": "number", "example": 4.9 },
+          "fecha_cierre": { "type": "string", "format": "date" },
+          "aval_in_situ": { "type": "boolean", "example": true },
+          "aval_tutor": { "type": "boolean", "example": true }
+        }
+      },
+      "ReportMetadataResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean", "example": true },
+          "reportId": { "type": "string", "example": "4a737d99-5ef2-4f18-bbdf-8097b3799cc9" },
+          "filename": { "type": "string", "example": "informe-visita-4a737d99.pdf" },
+          "url": { "type": "string", "example": "/api/v1/reports/4a737d99-5ef2-4f18-bbdf-8097b3799cc9" },
+          "size": { "type": "integer", "example": 18450 },
+          "createdAt": { "type": "string", "example": "2026-11-20T21:30:00.000Z" }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean", "example": false },
+          "error": { "type": "string", "example": "Mensaje detallado del error" }
+        }
+      }
+    }
+  }
+}

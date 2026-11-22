@@ -905,8 +905,15 @@
          COLUMNA DERECHA: FORMULARIO DE ACCESO
          ══════════════════════════════════════════════════════════ -->
         <main class="form-side">
-            <!-- Top Bar con Menú Demo -->
+            <!-- Top Bar con Menú Demo y Toggle Mobile -->
             <div class="form-top-bar">
+                <button type="button" class="mobile-nav-toggle" id="btnHamburgerIndex" aria-label="Abrir menú institucional" onclick="toggleDemoDropdown()">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="3" y1="12" x2="21" y2="12"></line>
+                        <line x1="3" y1="6" x2="21" y2="6"></line>
+                        <line x1="3" y1="18" x2="21" y2="18"></line>
+                    </svg>
+                </button>
                 <div class="demo-menu-wrapper">
                     <button type="button" class="demo-badge-btn" id="btnDemoMenu" onclick="toggleDemoDropdown()">
                         <span>💡</span> Cuentas de Prueba Demo <small style="opacity:.7">▾</small>
