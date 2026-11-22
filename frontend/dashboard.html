@@ -42,6 +42,7 @@
                     <span>UDI • 2026-II</span>
                 </div>
             </div>
+            <button type="button" class="sidebar-close" id="sidebarClose" aria-label="Cerrar menú">×</button>
         </div>
 
         <!-- Nav injected by JS per role -->
@@ -72,6 +73,7 @@
             </button>
         </div>
     </aside>
+    <div class="sidebar-backdrop" id="sidebarBackdrop" hidden></div>
 
     <!-- ═══════════════════════════════════════════════
          MAIN WRAPPER
@@ -81,6 +83,11 @@
         <!-- Top Bar -->
         <header class="topbar" id="topbar">
             <div class="topbar-left">
+                <button type="button" class="sidebar-toggle" id="sidebarToggle" aria-controls="sidebar" aria-expanded="false" aria-label="Abrir menú">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                        <path d="M4 6h16M4 12h16M4 18h16"/>
+                    </svg>
+                </button>
                 <div class="topbar-title">
                     <h1 id="pageTitle">Panel de Control</h1>
                     <small id="pageSubtitle">SIGPA — UDI 2026-II</small>
@@ -189,6 +196,7 @@
 <!-- Modals Container -->
 <div id="modalContainer"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/jspdf@4.2.1/dist/jspdf.umd.min.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>
