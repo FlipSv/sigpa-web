@@ -17,6 +17,10 @@
 const { executeQuery, executeTransaction } = require('../config/database');
 const { createError } = require('../middlewares/errorHandler');
 
+const practicaDelSemestre = `
+    p.ID_PRACTICA = (SELECT MIN(pp.ID_PRACTICA) FROM PRACTICA pp WHERE pp.SEMESTRE = p.SEMESTRE)
+`;
+
 /* ── GET /api/director/kpis ──────────────────────────────────────────── */
 async function getKpis(req, res, next) {
     try {
@@ -42,7 +46,10 @@ async function getKpis(req, res, next) {
         const conveniosActivos = instRes.rows && instRes.rows[0] ? Number(instRes.rows[0].CNT || 0) : 0;
         const cuposDisponibles = instRes.rows && instRes.rows[0] ? Number(instRes.rows[0].CUP || 0) : 0;
 
-        const pracRes = await executeQuery(`SELECT COUNT(*) AS CNT FROM PRACTICA WHERE ESTADO = 'ABIERTA' AND SEMESTRE IN (1, 2, 3)`);
+        const pracRes = await executeQuery(`
+            SELECT COUNT(*) AS CNT FROM PRACTICA p
+            WHERE p.ESTADO = 'ABIERTA' AND p.SEMESTRE IN (1, 2, 3) AND ${practicaDelSemestre}
+        `);
         const practicasAbiertas = pracRes.rows && pracRes.rows[0] ? Number(pracRes.rows[0].CNT || 0) : 0;
 
         const metrics = {
@@ -75,12 +82,12 @@ async function getKpis(req, res, next) {
 async function getPracticas(req, res, next) {
     try {
         const sql = `
-            SELECT p.ID_PRACTICA, p.SEMESTRE, p.TIPO, p.HORAS_REQUERIDAS,
-                   p.NOMBRE, p.ESTADO, p.ID_INSTITUCION, i.NOMBRE AS INSTITUCION,
-                   (SELECT COUNT(*) FROM ASIGNACION a WHERE a.ID_PRACTICA = p.ID_PRACTICA) AS TOTAL_ESTUDIANTES
+            SELECT p.ID_PRACTICA, p.SEMESTRE, p.HORAS_REQUERIDAS, p.ESTADO,
+                   (SELECT COUNT(DISTINCT a.ID_ESTUDIANTE) FROM ASIGNACION a
+                    JOIN PRACTICA ap ON a.ID_PRACTICA = ap.ID_PRACTICA
+                    WHERE ap.SEMESTRE = p.SEMESTRE) AS TOTAL_ESTUDIANTES
             FROM PRACTICA p
-            LEFT JOIN INSTITUCION i ON i.ID_INSTITUCION = p.ID_INSTITUCION
-            WHERE p.SEMESTRE IN (1, 2, 3)
+            WHERE p.SEMESTRE IN (1, 2, 3) AND ${practicaDelSemestre}
             ORDER BY p.SEMESTRE, p.ID_PRACTICA
         `;
         const result = await executeQuery(sql);
@@ -90,12 +97,9 @@ async function getPracticas(req, res, next) {
             data: result.rows.map(r => ({
                 id: r.ID_PRACTICA,
                 semestre: r.SEMESTRE,
-                tipo: r.TIPO,
                 horas: r.HORAS_REQUERIDAS,
-                nombre: r.NOMBRE,
+                nombre: `Práctica ${r.SEMESTRE}`,
                 estado: r.ESTADO,
-                idInstitucion: r.ID_INSTITUCION,
-                institucion: r.INSTITUCION || '',
                 totalEstudiantes: r.TOTAL_ESTUDIANTES || 0,
             })),
         });
@@ -157,11 +161,12 @@ async function getEstudiantes(req, res, next) {
 async function getAsignaciones(req, res, next) {
     try {
         const sql = `
-            SELECT a.ID_ASIGNACION, a.HORAS_ACUMULADAS, a.ESTADO_PRACTICA, a.ESTADO_APROBACION, a.ID_PRACTICA,
+            SELECT a.ID_ASIGNACION, a.ID_ESTUDIANTE, a.ID_INSTITUCION,
+                   a.HORAS_ACUMULADAS, a.ESTADO_PRACTICA, a.ESTADO_APROBACION, a.ID_PRACTICA,
                    TO_CHAR(a.FECHA_ASIGNACION, 'YYYY-MM-DD') AS FECHA_ASIGNACION,
                    u.NOMBRE || ' ' || NVL(u.APELLIDO, '') AS ESTUDIANTE,
                    t.NOMBRE || ' ' || NVL(t.APELLIDO, '') AS TUTOR,
-                   p.NOMBRE AS PRACTICA, p.HORAS_REQUERIDAS,
+                   p.NOMBRE AS PRACTICA, p.HORAS_REQUERIDAS, p.SEMESTRE,
                    i.NOMBRE AS INSTITUCION
             FROM ASIGNACION a
             JOIN USUARIO u ON a.ID_ESTUDIANTE = u.ID_USUARIO
@@ -176,7 +181,10 @@ async function getAsignaciones(req, res, next) {
             success: true,
             data: result.rows.map(r => ({
                 id: r.ID_ASIGNACION,
+                idEstudiante: r.ID_ESTUDIANTE,
+                idInstitucion: r.ID_INSTITUCION,
                 idPractica: r.ID_PRACTICA,
+                semestre: r.SEMESTRE,
                 aprobacion: r.ESTADO_APROBACION,
                 estudiante: (r.ESTUDIANTE || '').trim(),
                 tutor: (r.TUTOR || '').trim(),
@@ -218,29 +226,21 @@ async function cambiarEstado(req, res, next) {
 async function nuevaPractica(req, res, next) {
     try {
         const semestre = Number(req.body.semestre);
-        const institucion = Number(req.body.id_institucion);
         const horas = Number(req.body.horas);
-        const tipo = req.body.tipo;
-        const modalidades = ['OBSERVACION', 'INTERVENCION', 'DOCENTE', 'INVESTIGATIVA', 'PROFESIONAL'];
-        if (![1, 2, 3].includes(semestre) || !Number.isInteger(institucion) || institucion < 1 ||
-            !Number.isInteger(horas) || horas < 1 || !modalidades.includes(tipo)) {
-            throw createError(400, 'Seleccione semestre, institución, modalidad y horas válidos');
+        if (![1, 2, 3].includes(semestre) || !Number.isInteger(horas) || horas < 1) {
+            throw createError(400, 'Seleccione un semestre válido e indique las horas requeridas');
         }
 
         await executeTransaction(async conn => {
             await lockOracleTable(conn, 'PRACTICA');
-            const result = await conn.execute(`
-                INSERT INTO PRACTICA (ID_PRACTICA, NOMBRE, SEMESTRE, TIPO, HORAS_REQUERIDAS, ESTADO, ID_INSTITUCION)
-                SELECT (SELECT NVL(MAX(ID_PRACTICA), 0) + 1 FROM PRACTICA), :nombre,
-                       :semestre, :tipo, :horas, 'ABIERTA', i.ID_INSTITUCION
-                FROM INSTITUCION i
-                WHERE i.ID_INSTITUCION = :institucion AND ${vigenciaInstitucion}
-                  AND NOT EXISTS (SELECT 1 FROM PRACTICA p
-                                  WHERE p.SEMESTRE = :semestreExistente AND p.ID_INSTITUCION = i.ID_INSTITUCION)
-                  AND (SELECT COUNT(*) FROM PRACTICA p WHERE p.SEMESTRE = :semestreLimite) <
-                      (SELECT COUNT(*) FROM INSTITUCION i WHERE ${vigenciaInstitucion})
-            `, { nombre: `Práctica ${semestre}`, semestre, semestreExistente: semestre, semestreLimite: semestre, tipo, horas, institucion }, { autoCommit: false });
-            if (!result.rowsAffected) throw createError(409, 'Institución sin convenio vigente o límite de prácticas alcanzado para ese semestre');
+            const existente = await conn.execute(
+                'SELECT ID_PRACTICA FROM PRACTICA WHERE SEMESTRE = :semestre', { semestre }
+            );
+            if (existente.rows.length) throw createError(409, 'Este semestre ya tiene una práctica');
+            await conn.execute(`
+                INSERT INTO PRACTICA (ID_PRACTICA, NOMBRE, SEMESTRE, HORAS_REQUERIDAS, ESTADO)
+                VALUES ((SELECT NVL(MAX(ID_PRACTICA), 0) + 1 FROM PRACTICA), :nombre, :semestre, :horas, 'ABIERTA')
+            `, { nombre: `Práctica ${semestre}`, semestre, horas }, { autoCommit: false });
         });
 
         res.json({
@@ -308,10 +308,10 @@ async function asignarEstudiante(req, res, next) {
                        0, 'PENDIENTE', 'PENDIENTE', 'PENDIENTE', SYSDATE
                 FROM USUARIO u
                 JOIN USUARIO t ON t.SEMESTRE = u.SEMESTRE AND t.ROL = 'TUTOR' AND t.ACTIVO = 'S'
-                JOIN PRACTICA p ON p.SEMESTRE = u.SEMESTRE AND p.ESTADO = 'ABIERTA'
-                JOIN INSTITUCION i ON i.ID_INSTITUCION = p.ID_INSTITUCION
+                JOIN PRACTICA p ON p.SEMESTRE = u.SEMESTRE AND p.ESTADO = 'ABIERTA' AND ${practicaDelSemestre}
+                JOIN INSTITUCION i ON i.ID_INSTITUCION = :institucion
                 WHERE u.ID_USUARIO = :estudiante AND u.ROL = 'ESTUDIANTE' AND u.ACTIVO = 'S'
-                  AND u.SEMESTRE = :semestre AND i.ID_INSTITUCION = :institucion AND ${vigenciaInstitucion}
+                  AND u.SEMESTRE = :semestre AND ${vigenciaInstitucion}
                   AND (SELECT COUNT(*) FROM ASIGNACION a WHERE a.ID_INSTITUCION = i.ID_INSTITUCION
                        AND a.ESTADO_PRACTICA IN ('EN_CURSO', 'PENDIENTE')) < i.CUPOS_DISPONIBLES
                   AND NOT EXISTS (SELECT 1 FROM ASIGNACION a WHERE a.ID_ESTUDIANTE = u.ID_USUARIO

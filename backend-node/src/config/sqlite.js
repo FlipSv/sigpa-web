@@ -154,7 +154,7 @@ function initSchema(db) {
         CREATE TABLE IF NOT EXISTS MODALIDAD (
             ID_MODALIDAD INTEGER PRIMARY KEY,
             NOMBRE TEXT NOT NULL,
-            SEMESTRE INTEGER NOT NULL DEFAULT 1 CHECK (SEMESTRE IN (1, 2, 3)),
+            SEMESTRE INTEGER NOT NULL UNIQUE CHECK (SEMESTRE IN (1, 2, 3)),
             TIPO TEXT DEFAULT 'OBSERVACION',
             HORAS_REQUERIDAS INTEGER DEFAULT 64,
             ESTADO TEXT DEFAULT 'ABIERTA' CHECK (ESTADO IN ('ABIERTA', 'CERRADA')),
@@ -562,22 +562,6 @@ function seedInitialData(db) {
 }
 
 function configureSemesters(db) {
-    const practices = db.prepare('PRAGMA table_info(PRACTICA)').all();
-    if (!practices.some(column => column.name === 'ID_INSTITUCION')) {
-        db.exec(`
-            ALTER TABLE PRACTICA ADD ID_INSTITUCION INTEGER REFERENCES INSTITUCION(ID_INSTITUCION);
-            UPDATE PRACTICA SET ID_INSTITUCION = (
-                SELECT MIN(a.ID_INSTITUCION) FROM ASIGNACION a
-                WHERE a.ID_PRACTICA = PRACTICA.ID_PRACTICA
-                HAVING COUNT(DISTINCT a.ID_INSTITUCION) = 1
-            );
-            UPDATE PRACTICA SET ID_INSTITUCION = SEMESTRE
-            WHERE ID_INSTITUCION IS NULL AND SEMESTRE IN (2, 3)
-              AND EXISTS (SELECT 1 FROM INSTITUCION i WHERE i.ID_INSTITUCION = PRACTICA.SEMESTRE)
-              AND NOMBRE IN ('Práctica de Contextualización e Intervención Inicial', 'Práctica Pedagógica y Didáctica Docente');
-        `);
-    }
-
     const columns = db.prepare('PRAGMA table_info(USUARIO)').all();
     if (!columns.some(column => column.name === 'SEMESTRE')) {
         db.exec('ALTER TABLE USUARIO ADD SEMESTRE INTEGER CHECK (SEMESTRE IN (1, 2, 3))');

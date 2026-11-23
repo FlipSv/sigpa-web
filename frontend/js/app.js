@@ -760,8 +760,7 @@ async function loadDirectorView(tab, btn) {
                                 ${practicas.slice(0, 6).map(p => `
                                 <tr>
                                     <td><span class="status-badge status-brand">Sem ${p.semestre}</span></td>
-                                    <td><strong style="font-size:13px;">${escaparAcademico(p.nombre)}</strong><br>
-                                        <small class="text-muted">${escaparAcademico(p.institucion || p.tipo)}</small></td>
+                                    <td><strong style="font-size:13px;">${escaparAcademico(p.nombre)}</strong></td>
                                     <td><strong>${p.horas}</strong> hrs</td>
                                     <td><strong>${p.totalEstudiantes || 0}</strong> asignados</td>
                                     <td><span class="status-badge ${p.estado === 'ABIERTA' ? 'status-open' : 'status-closed'}">${p.estado}</span></td>
@@ -798,15 +797,14 @@ async function loadDirectorView(tab, btn) {
                 <div class="card-body table-responsive">
                     <table class="data-table">
                         <thead><tr>
-                            <th>Semestre</th><th>Nombre de la Práctica</th><th>Modalidad</th>
+                            <th>Semestre</th><th>Nombre de la Práctica</th>
                             <th>Horas</th><th>Practicantes</th><th>Estado</th><th>Acción</th>
                         </tr></thead>
                         <tbody>
                             ${practicas.map(p => `
                             <tr>
                                 <td><span class="status-badge status-brand">Sem ${p.semestre}</span></td>
-                                <td><strong>${escaparAcademico(p.nombre)}</strong><br><small class="text-muted">${escaparAcademico(p.institucion)}</small></td>
-                                <td><span class="status-badge ${p.tipo === 'OBSERVACION' ? 'status-graded' : 'status-open'}">${escaparAcademico(p.tipo)}</span></td>
+                                <td><strong>${escaparAcademico(p.nombre)}</strong></td>
                                 <td>${p.horas} hrs</td>
                                 <td><strong>${p.totalEstudiantes}</strong></td>
                                 <td><span class="status-badge ${p.estado === 'ABIERTA' ? 'status-open' : 'status-closed'}">${p.estado}</span></td>
@@ -924,7 +922,7 @@ async function loadDirectorView(tab, btn) {
                                 <label for="m-informe-practica">Práctica</label>
                                 <select id="m-informe-practica" name="practica" required onchange="limpiarInformePractica()">
                                     <option value="">Seleccione una práctica</option>
-                                    ${practicas.map(p => optionAcademica(p.id, `${p.nombre} · ${p.institucion || `Semestre ${p.semestre}`}`)).join('')}
+                                    ${practicas.map(p => optionAcademica(p.semestre, `${p.nombre} · Semestre ${p.semestre}`)).join('')}
                                 </select>
                                 <button class="btn-primary-sm" type="submit">Consultar</button>
                             </form>` : '<p>No hay prácticas abiertas.</p>'}
@@ -2621,9 +2619,9 @@ function optionAcademica(value, label) {
     return `<option value="${escaparAcademico(value)}">${escaparAcademico(label)}</option>`;
 }
 
-function opcionesSemestres() {
+function opcionesSemestres(semestres = [1, 2, 3]) {
     return '<option value="">Seleccione un semestre</option>' +
-        [1, 2, 3].map(n => optionAcademica(n, `Semestre ${n}`)).join('');
+        semestres.map(n => optionAcademica(n, `Semestre ${n}`)).join('');
 }
 
 async function leerDatosAcademicos(path) {
@@ -2645,7 +2643,12 @@ async function enviarDatosAcademicos(path, payload) {
 
 async function openModalNuevaPractica() {
     try {
-        const instituciones = (await leerDatosAcademicos('/director/instituciones')).filter(i => i.vigente);
+        const practicas = await leerDatosAcademicos('/director/practicas');
+        const semestres = [1, 2, 3].filter(n => !practicas.some(p => p.semestre === n));
+        if (!semestres.length) {
+            sigpaAlert('Nueva práctica', 'Los tres semestres ya tienen una práctica.', 'info');
+            return;
+        }
         document.getElementById('modalContainer').innerHTML = `
         <div class="modal-overlay" onclick="closeModal(event)">
             <div class="modal-content" onclick="event.stopPropagation()">
@@ -2656,19 +2659,7 @@ async function openModalNuevaPractica() {
                 <form onsubmit="guardarNuevaPractica(event)">
                     <div class="modal-body">
                         <label for="m-practica-semestre">Semestre</label>
-                        <div class="input-wrapper"><select id="m-practica-semestre" name="semestre" required>${opcionesSemestres()}</select></div>
-                        <label for="m-practica-inst">Institución</label>
-                        <div class="input-wrapper"><select id="m-practica-inst" name="id_institucion" required>
-                            <option value="">${instituciones.length ? 'Seleccione una institución' : 'No hay convenios vigentes'}</option>
-                            ${instituciones.map(i => optionAcademica(i.id, i.nombre)).join('')}
-                        </select></div>
-                        <label for="m-practica-tipo">Modalidad</label>
-                        <div class="input-wrapper"><select id="m-practica-tipo" name="tipo" required>
-                            <option value="">Seleccione una modalidad</option>
-                            <option value="OBSERVACION">Observación</option><option value="INTERVENCION">Intervención</option>
-                            <option value="DOCENTE">Docente</option><option value="INVESTIGATIVA">Investigativa</option>
-                            <option value="PROFESIONAL">Profesional</option>
-                        </select></div>
+                        <div class="input-wrapper"><select id="m-practica-semestre" name="semestre" required>${opcionesSemestres(semestres)}</select></div>
                         <label for="m-practica-horas">Horas requeridas</label>
                         <div class="input-wrapper"><input id="m-practica-horas" name="horas" type="number" min="1" value="64" required></div>
                     </div>
@@ -2875,8 +2866,10 @@ async function cargarOpcionesAsignacion(form) {
         ]);
         if (form.solicitudAsignacion !== solicitud) return;
 
-        const disponibles = new Set(practicas.filter(p => p.estado === 'ABIERTA' && p.semestre === Number(seleccion)).map(p => p.idInstitucion));
-        const receptoras = instituciones.filter(i => disponibles.has(i.id) && i.vigente && i.estudiantesAsignados < i.cupos);
+        const practicaAbierta = practicas.some(p => p.estado === 'ABIERTA' && p.semestre === Number(seleccion));
+        const receptoras = practicaAbierta
+            ? instituciones.filter(i => i.vigente && i.estudiantesAsignados < i.cupos)
+            : [];
         estudiante.innerHTML = '<option value="">Seleccione un estudiante</option>' + estudiantes.map(e =>
             optionAcademica(e.id, `${e.nombre} (Semestre ${e.semestre})`)
         ).join('');
@@ -2886,8 +2879,9 @@ async function cargarOpcionesAsignacion(form) {
         estudiante.disabled = !estudiantes.length;
         institucion.disabled = !receptoras.length;
         submit.disabled = estudiante.disabled || institucion.disabled;
-        estado.textContent = !estudiantes.length ? 'No hay estudiantes activos en este semestre.' :
-            !receptoras.length ? 'No hay instituciones con práctica abierta y cupos para este semestre.' : '';
+        estado.textContent = !practicaAbierta ? 'Este semestre necesita una práctica abierta.' :
+            !estudiantes.length ? 'No hay estudiantes activos en este semestre.' :
+                !receptoras.length ? 'No hay instituciones con convenio vigente y cupos disponibles.' : '';
     } catch (error) {
         if (form.solicitudAsignacion === solicitud) estado.textContent = error.message;
     }
@@ -3056,47 +3050,73 @@ ${b.comentarios}`],
     ]);
 }
 
+function seccionesInformePractica(practica, asignaciones, instituciones) {
+    const participantes = asignaciones.filter(a => a.semestre === practica.semestre);
+    const aprobadas = participantes.filter(a => a.aprobacion === 'APROBADA');
+    const pendientesAprobacion = participantes.filter(a => a.aprobacion === 'PENDIENTE');
+    const porEstudiante = new Map();
+    const porInstitucion = new Map();
+
+    for (const asignacion of aprobadas) {
+        const actual = porEstudiante.get(asignacion.idEstudiante);
+        if (!actual || (actual.estado !== 'EN_CURSO' && asignacion.estado === 'EN_CURSO')) {
+            porEstudiante.set(asignacion.idEstudiante, asignacion);
+        }
+        if (!porInstitucion.has(asignacion.idInstitucion)) porInstitucion.set(asignacion.idInstitucion, new Set());
+        porInstitucion.get(asignacion.idInstitucion).add(asignacion.idEstudiante);
+    }
+
+    const pendientesHoras = [...porEstudiante.values()].filter(a => a.horasAcumuladas < (a.horasRequeridas || practica.horas));
+    const resumen = [
+        `Semestre ${practica.semestre} · Horas requeridas: ${practica.horas}`,
+        `Estudiantes con asignación aprobada: ${porEstudiante.size}`,
+        `Estudiantes con horas pendientes: ${pendientesHoras.length}`,
+        `Estudiantes con horas completas: ${porEstudiante.size - pendientesHoras.length}`,
+        `Asignaciones pendientes de aprobación: ${pendientesAprobacion.length}`,
+    ];
+    const institucionesResumen = instituciones.map(institucion => {
+        const asignados = porInstitucion.get(institucion.id)?.size || 0;
+        const libres = Math.max(0, institucion.cupos - institucion.estudiantesAsignados);
+        const disponibilidad = institucion.vigente ? `${libres} disponibles` : 'sin convenio vigente';
+        return `${institucion.nombre} · ${asignados} estudiantes aprobados del semestre · ${institucion.estudiantesAsignados}/${institucion.cupos} cupos ocupados o reservados · ${disponibilidad}`;
+    });
+    const sinInstitucion = porInstitucion.get(null)?.size || 0;
+    if (sinInstitucion) institucionesResumen.push(`Sin institución registrada · ${sinInstitucion} estudiantes aprobados del semestre`);
+
+    return [
+        ['Resumen administrativo', resumen.join('\n')],
+        ['Estudiantes e inventario de cupos por institución', institucionesResumen.join('\n') || 'Sin instituciones registradas.'],
+        ['Detalle de horas pendientes', pendientesHoras.map(a => {
+            const requeridas = a.horasRequeridas || practica.horas;
+            return `${a.estudiante} · ${a.institucion || 'Sin institución'} · ${a.horasAcumuladas}/${requeridas} h · Faltan ${requeridas - a.horasAcumuladas} h`;
+        }).join('\n') || 'Sin estudiantes con horas pendientes.'],
+    ];
+}
+
 async function mostrarInformePractica(event) {
     event.preventDefault();
     const form = event.currentTarget;
-    const id = Number(form.elements.practica.value);
+    const semestre = Number(form.elements.practica.value);
     const result = document.getElementById('resultadoInformePractica');
     const request = Symbol();
     result.solicitudInforme = request;
     result.innerHTML = loadingState();
     try {
-        const [practicas, asignaciones, bitacoras] = await Promise.all([
+        const [practicas, asignaciones, instituciones] = await Promise.all([
             leerDatosAcademicos('/director/practicas'),
             leerDatosAcademicos('/director/asignaciones'),
-            leerDatosAcademicos(`/tutor/bitacoras?id_practica=${id}`),
+            leerDatosAcademicos('/director/instituciones'),
         ]);
         if (result.solicitudInforme !== request) return;
-        const practica = practicas.find(p => p.id === id && p.estado === 'ABIERTA');
+        const practica = practicas.find(p => p.semestre === semestre && p.estado === 'ABIERTA');
         if (!practica) throw new Error('La práctica seleccionada ya no está disponible');
-        const participantes = asignaciones.filter(a => a.idPractica === id);
-        const resumen = [
-            `Semestre ${practica.semestre} · ${practica.institucion || 'Institución sin registrar'}`,
-            `Modalidad: ${practica.tipo} · Horas requeridas: ${practica.horas}`,
-            `Asignaciones: ${participantes.length} · Horas validadas: ${participantes.reduce((sum, a) => sum + a.horasAcumuladas, 0)}`,
-        ].join('\n');
-        const progreso = participantes.map(a => `${a.estudiante} · ${a.horasAcumuladas}/${a.horasRequeridas} h · ${a.aprobacion || a.estado}`);
-        const revisiones = bitacoras.map(b => [
-            `${b.estudiante} · Bitácora ${b.visita} · ${b.nota == null ? 'Pendiente' : `${b.nota}/5`}`,
-            b.comentarios,
-            b.observaciones ? textoBitacora(b.observaciones) : '',
-            b.avalAsesor ? `Aval del asesor: ${b.avalAsesor}` : '',
-        ].filter(Boolean).join('\n'));
-        const secciones = [
-            ['Resumen', resumen],
-            ['Cumplimiento de horas', progreso.join('\n') || 'Sin asignaciones.'],
-            ['Evaluaciones y observaciones', revisiones.join('\n\n') || 'Sin bitácoras.'],
-        ];
+        const secciones = seccionesInformePractica(practica, asignaciones, instituciones);
         result.innerHTML = `
             <h4>${escaparAcademico(practica.nombre)}</h4>
             ${secciones.map(([label, content]) => `<h5>${label}</h5><p style="white-space:pre-wrap;">${escaparAcademico(content)}</p>`).join('')}
             <button type="button" class="btn-primary-sm" data-descargar>Descargar informe</button>`;
         result.querySelector('[data-descargar]').addEventListener('click', () =>
-            descargarPdfAcademico(`Informe de ${practica.nombre}`, `informe-practica-${id}.pdf`, secciones)
+            descargarPdfAcademico(`Informe de ${practica.nombre}`, `informe-practica-${practica.id}.pdf`, secciones)
         );
     } catch (error) {
         if (result.solicitudInforme === request) result.innerHTML = errorState(escaparAcademico(error.message));

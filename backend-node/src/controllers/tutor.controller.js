@@ -84,12 +84,15 @@ async function getBitacoras(req, res, next) {
             )
             WHERE (a.ID_TUTOR = :idTutor1 OR :idTutor2 = 0)
               AND (:practica = 0 OR p.ID_PRACTICA = :idPractica)
+              AND (:semestre = 0 OR p.SEMESTRE = :semestreFiltro)
             ORDER BY b.ID_BITACORA DESC
         `;
 
         const practica = Number(req.query.id_practica || 0);
+        const semestre = req.usuario.rol === 'DIRECTOR' ? Number(req.query.semestre || 0) : 0;
         if (!Number.isInteger(practica) || practica < 0) throw createError(400, 'Práctica inválida');
-        const result = await executeQuery(sql, { idTutor1: idTutor, idTutor2: idTutor, practica, idPractica: practica });
+        if (![0, 1, 2, 3].includes(semestre)) throw createError(400, 'Semestre inválido');
+        const result = await executeQuery(sql, { idTutor1: idTutor, idTutor2: idTutor, practica, idPractica: practica, semestre, semestreFiltro: semestre });
 
         res.json({
             success: true,

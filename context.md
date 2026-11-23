@@ -1,5 +1,9 @@
 # Correcciones de SIGPA
 
+## Modelo de prácticas vigente
+
+La última corrección establece una práctica por semestre, con horas requeridas y sin modalidad en Director. La institución se elige al asignar a cada estudiante y se registra en la asignación. El catálogo utiliza la práctica más antigua por semestre cuando encuentra registros duplicados del modelo anterior y el informe incluye las asignaciones históricas del mismo semestre. El esquema nuevo no incluye un vínculo directo entre práctica e institución. Los datos anteriores y la columna de tipo que consulta Estudiante se conservan por compatibilidad.
+
 El usuario trabaja en paralelo con un compañero. El alcance de esta sesión cubre Director, Tutor y ajustes generales compatibles con ese reparto. Las pantallas y funciones de Estudiante y Asesor están a cargo del compañero. Después del paso 1, el usuario autorizó ejecutar todos los pasos pendientes en una sola ronda.
 
 `PropuestaProyectoIntegrador - QUINTO 2026-2.pdf` aporta contexto académico. `Copia de PI SOLUCIONES.pdf` detalla las correcciones. Ambos están en Descargas.
