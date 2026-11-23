@@ -140,7 +140,15 @@ for (const cand of frontendCandidates) {
 
 if (frontendDir) {
     console.log(`[VISTA] Sirviendo archivos estáticos desde: ${frontendDir}`);
-    app.use(express.static(frontendDir));
+    app.use(express.static(frontendDir, {
+        etag: false,
+        maxAge: 0,
+        setHeaders: (res) => {
+            res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+            res.setHeader('Pragma', 'no-cache');
+            res.setHeader('Expires', '0');
+        }
+    }));
 
     // Fallback para rutas directas
     app.get('*', (req, res, next) => {

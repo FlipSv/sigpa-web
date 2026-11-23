@@ -2485,13 +2485,16 @@ function _renderAsesorCharts(byInst, conAval, sinAval) {
 
 async function cambiarEstadoPractica(id, nuevoEstado) {
     try {
+        const token = getToken();
+        const headers = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
         const res = await fetch(`${API_BASE}/director/cambiar_estado`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers,
             body: JSON.stringify({ id, estado: nuevoEstado })
         });
         const d = await res.json();
-        if (d.success) { loadDirectorView('kpis'); }
+        if (d.success) { loadDirectorView('practicas'); }
         else sigpaAlert('Estado de Práctica', d.message, 'warning');
     } catch (e) { sigpaAlert('Error de Conexión', e.message, 'error'); }
 }
@@ -2512,20 +2515,27 @@ function opcionesSemestres() {
 }
 
 async function leerDatosAcademicos(path) {
-    const response = await fetch(`${API_BASE}${path}`);
+    const token = getToken();
+    const headers = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const response = await fetch(`${API_BASE}${path}`, { headers });
     const result = await response.json();
     if (!response.ok || !result.success) throw new Error(result.message || 'No se pudieron cargar los datos');
     return result.data;
 }
 
 async function enviarDatosAcademicos(path, payload) {
+    const token = getToken();
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
     const response = await fetch(`${API_BASE}${path}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(payload),
     });
     const result = await response.json();
     if (!response.ok || !result.success) throw new Error(result.message || 'No se pudo guardar el cambio');
+    return result;
 }
 
 const MODALIDADES_CURRICULARES = {

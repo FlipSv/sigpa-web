@@ -341,21 +341,19 @@ function seedInitialData(db) {
     // Contraseña estándar '1234' cifrada con bcrypt
     const passHash = bcrypt.hashSync('1234', 10);
 
-    // 1. Usuarios
+    // 1. Usuarios canónicos (Día Cero)
     const userCount = db.prepare('SELECT COUNT(*) AS CNT FROM USUARIO').get().CNT;
     if (userCount === 0) {
         const insertUsuario = db.prepare(`
-            INSERT INTO USUARIO (ID_USUARIO, NOMBRE, APELLIDO, EMAIL, CONTRASENA, ROL, ACTIVO)
-            VALUES (:id, :nombre, :apellido, :email, :contrasena, :rol, 'S')
+            INSERT INTO USUARIO (ID_USUARIO, NOMBRE, APELLIDO, EMAIL, CONTRASENA, ROL, SEMESTRE, ACTIVO)
+            VALUES (:id, :nombre, :apellido, :email, :contrasena, :rol, :semestre, 'S')
         `);
 
         const usuarios = [
-            { id: 1, nombre: 'Ana', apellido: 'Martínez (Directora)', email: 'director@sigpa.edu', contrasena: passHash, rol: 'DIRECTOR' },
-            { id: 2, nombre: 'Carlos', apellido: 'Coordinador (Tutor)', email: 'coord@sigpa.edu', contrasena: passHash, rol: 'COORDINADOR' },
-            { id: 3, nombre: 'Laura', apellido: 'Pérez (Estudiante)', email: 'estudiante@sigpa.edu', contrasena: passHash, rol: 'ESTUDIANTE' },
-            { id: 4, nombre: 'Mateo', apellido: 'Gómez (Tutor)', email: 'tutor@sigpa.edu', contrasena: passHash, rol: 'TUTOR' },
-            { id: 5, nombre: 'Clara', apellido: 'Rojas (Asesora In Situ)', email: 'asesor@sigpa.edu', contrasena: passHash, rol: 'ASESOR' },
-            { id: 6, nombre: 'Andrés', apellido: 'Silva (Estudiante)', email: 'estudiante2@sigpa.edu', contrasena: passHash, rol: 'ESTUDIANTE' },
+            { id: 1, nombre: 'Carmen Rosa', apellido: 'Delgado (Directora)', email: 'director@sigpa.edu', contrasena: passHash, rol: 'DIRECTOR', semestre: null },
+            { id: 2, nombre: 'Carlos Andrés', apellido: 'Mendoza (Tutor)', email: 'tutor@sigpa.edu', contrasena: passHash, rol: 'TUTOR', semestre: null },
+            { id: 3, nombre: 'Santiago', apellido: 'Acevedo (Estudiante)', email: 'estudiante@sigpa.edu', contrasena: passHash, rol: 'ESTUDIANTE', semestre: 1 },
+            { id: 4, nombre: 'Martha Helena', apellido: 'Gómez (Asesora)', email: 'asesor@sigpa.edu', contrasena: passHash, rol: 'ASESOR', semestre: null },
         ];
 
         for (const u of usuarios) {
@@ -363,38 +361,7 @@ function seedInitialData(db) {
         }
     }
 
-    const usuarios = [
-        { id: 1, nombre: 'Ana', apellido: 'Martínez (Directora)', email: 'director@sigpa.edu', contrasena: passHash, rol: 'DIRECTOR' },
-        { id: 2, nombre: 'Carlos', apellido: 'Coordinador (Tutor)', email: 'coord@sigpa.edu', contrasena: passHash, rol: 'COORDINADOR' },
-        { id: 3, nombre: 'Laura', apellido: 'Pérez (Estudiante)', email: 'estudiante@sigpa.edu', contrasena: passHash, rol: 'ESTUDIANTE' },
-        { id: 4, nombre: tutoresDemo[0].nombre, apellido: tutoresDemo[0].apellido, email: tutoresDemo[0].email, contrasena: passHash, rol: 'TUTOR' },
-        { id: 5, nombre: 'Clara', apellido: 'Rojas (Asesora In Situ)', email: 'asesor@sigpa.edu', contrasena: passHash, rol: 'ASESOR' },
-        { id: 6, nombre: 'Andrés', apellido: 'Silva (Estudiante)', email: 'estudiante2@sigpa.edu', contrasena: passHash, rol: 'ESTUDIANTE' },
-    ];
-
-    // 3. Prácticas Académicas
-    const pracCount = db.prepare('SELECT COUNT(*) AS CNT FROM PRACTICA').get().CNT;
-    if (pracCount === 0) {
-        const insertPractica = db.prepare(`
-            INSERT INTO PRACTICA (ID_PRACTICA, NOMBRE, SEMESTRE, TIPO, ID_MODALIDAD, HORAS_REQUERIDAS, ESTADO, DESCRIPCION)
-            VALUES (:id, :nombre, :semestre, :tipo, :idMod, :horas, 'ABIERTA', :descripcion)
-        `);
-
-        const practicas = [
-            { id: 1, nombre: 'Práctica de Observación en Infancia', semestre: 1, tipo: 'OBSERVACION', idMod: 1, horas: 64, descripcion: 'Observación diagnóstica en centros infantiles y jardines.' },
-            { id: 2, nombre: 'Práctica de Contextualización e Intervención Inicial', semestre: 2, tipo: 'INTERVENCION', idMod: 2, horas: 64, descripcion: 'Acompañamiento pedagógico formativo en aula.' },
-            { id: 3, nombre: 'Práctica Pedagógica y Didáctica Docente', semestre: 3, tipo: 'DOCENTE', idMod: 3, horas: 64, descripcion: 'Planificación de unidades didácticas y proyectos lúdicos.' },
-            { id: 4, nombre: 'Práctica de Investigación en Primera Infancia', semestre: 4, tipo: 'INVESTIGATIVA', idMod: 4, horas: 64, descripcion: 'Sistematización de experiencias y diario de campo.' },
-            { id: 5, nombre: 'Práctica Integral Comunitaria (Formato P5)', semestre: 5, tipo: 'INTERVENCION', idMod: 5, horas: 80, descripcion: 'Proyectos educativos comunitarios y familiares.' },
-            { id: 6, nombre: 'Práctica de Grado y Liderazgo Infantil (Formato P6)', semestre: 6, tipo: 'PROFESIONAL', idMod: 6, horas: 96, descripcion: 'Gestión integral pedagógica en instituciones oficiales y privadas.' },
-        ];
-
-        for (const p of practicas) {
-            insertPractica.run(p);
-        }
-    }
-
-    // 4. Instituciones Educativas con Convenio
+    // 2. Instituciones Educativas Oficiales con Convenio
     const instCount = db.prepare('SELECT COUNT(*) AS CNT FROM INSTITUCION').get().CNT;
     if (instCount === 0) {
         const insertInstitucion = db.prepare(`
@@ -403,122 +370,14 @@ function seedInitialData(db) {
         `);
 
         const instituciones = [
-            { id: 1, nombre: 'Colegio Integrado UDI Kids', direccion: 'Calle 9 # 23-45 Bucaramanga', telefono: '6076987654', cupos: 10, vencimiento: '2028-12-31' },
-            { id: 2, nombre: 'Jardín Infantil Pequeños Sabios', direccion: 'Carrera 27 # 45-12 Bucaramanga', telefono: '6076451234', cupos: 6, vencimiento: '2027-11-30' },
-            { id: 3, nombre: 'Centro Educativo San Francisco', direccion: 'Calle 34 # 19-20 Floridablanca', telefono: '6076328901', cupos: 8, vencimiento: '2028-06-15' },
-            { id: 4, nombre: 'Liceo Pedagógico El Prado', direccion: 'Carrera 33 # 52-10 Cabecera', telefono: '6076572211', cupos: 4, vencimiento: '2027-09-20' },
+            { id: 1, nombre: 'Colegio Fernando Aragón', direccion: 'Cra 27 # 34-12', telefono: '6076345678', cupos: 3, vencimiento: '2028-12-31' },
+            { id: 2, nombre: 'Colegio Cooperativo Comfenalco', direccion: 'Calle 45 # 18-20', telefono: '6076789012', cupos: 5, vencimiento: '2028-12-31' },
+            { id: 3, nombre: 'Colegio La Salle', direccion: 'Cra 33 # 48-01', telefono: '6076432109', cupos: 5, vencimiento: '2028-12-31' },
         ];
 
         for (const inst of instituciones) {
             insertInstitucion.run(inst);
         }
-    }
-
-    const practicas = [
-        { id: 1, nombre: 'Práctica de Observación en Infancia', semestre: 1, tipo: 'OBSERVACION', horas: 64, descripcion: 'Observación diagnóstica en centros infantiles y jardines.' },
-        { id: 2, nombre: 'Práctica de Contextualización e Intervención Inicial', semestre: 2, tipo: 'INTERVENCION', horas: 64, descripcion: 'Acompañamiento pedagógico formativo en aula.' },
-        { id: 3, nombre: 'Práctica Pedagógica y Didáctica Docente', semestre: 3, tipo: 'DOCENTE', horas: 64, descripcion: 'Planificación de unidades didácticas y proyectos lúdicos.' },
-    ];
-
-    // 6. Bitácoras
-    const bitCount = db.prepare('SELECT COUNT(*) AS CNT FROM BITACORA').get().CNT;
-    if (bitCount === 0) {
-        const insertBitacora = db.prepare(`
-            INSERT INTO BITACORA (ID_BITACORA, ID_ASIGNACION, NUMERO_VISITA, FECHA_REGISTRO, HORAS_SESION, ACTIVIDADES, OBSERVACIONES, URL_EVIDENCIA, ESTADO_REVISION)
-            VALUES (:id, :idAsignacion, :visita, :fecha, :horas, :actividades, :observaciones, :evidencia, :estado)
-        `);
-
-        insertBitacora.run({
-            id: 1,
-            idAsignacion: 1,
-            visita: 1,
-            fecha: '2026-08-15',
-            horas: 16.0,
-            actividades: '[FASE 1 - INICIO / MOTIVACIÓN]:\nPresentación ante el grupo con dinámica de títeres y bienvenida afectiva.\n\n[FASE 2 - DESARROLLO EN AULA]:\nObservación y registro de dinámicas de interacción grupal, motricidad y juego libre.\n\n[FASE 3 - CIERRE Y EVALUACIÓN FORMATIVA]:\nRonda de preguntas formativas y dibujo colectivo de los aprendizajes alcanzados.',
-            observaciones: '[REFLEXIÓN PEDAGÓGICA DOCENTE]:\nLos niños mostraron alta motivación; se requiere reforzar tiempos en la transición de actividades.',
-            evidencia: 'https://drive.google.com/drive/folders/evidencia_visita_1_udi',
-            estado: 'CALIFICADA',
-        });
-    }
-
-    // 7. Visitas
-    const visCount = db.prepare('SELECT COUNT(*) AS CNT FROM VISITA').get().CNT;
-    if (visCount === 0) {
-        const insertVisita = db.prepare(`
-            INSERT INTO VISITA (ID_VISITA, ID_ASIGNACION, ID_PRACTICA, NUMERO_VISITA, FECHA_PROGRAMADA, FECHA_REALIZADA, ESTADO, TIPO_VISITA, OBSERVACIONES)
-            VALUES (:id, :idAsignacion, :idPractica, :visita, :prog, :real, :estado, :tipo, :obs)
-        `);
-        insertVisita.run({
-            id: 1,
-            idAsignacion: 1,
-            idPractica: 1,
-            visita: 1,
-            prog: '2026-08-15',
-            real: '2026-08-15',
-            estado: 'REALIZADA',
-            tipo: 'INICIAL',
-            obs: 'Primera visita de diagnóstico y observación de aula.',
-        });
-        insertVisita.run({
-            id: 2,
-            idAsignacion: 1,
-            idPractica: 1,
-            visita: 2,
-            prog: '2026-09-01',
-            real: null,
-            estado: 'PROGRAMADA',
-            tipo: 'SEGUIMIENTO',
-            obs: 'Segunda visita de acompañamiento y revisión de momentos didácticos.',
-        });
-    }
-
-    // 8. Evaluaciones
-    const evalCount = db.prepare('SELECT COUNT(*) AS CNT FROM EVALUACION').get().CNT;
-    if (evalCount === 0) {
-        const insertEvaluacion = db.prepare(`
-            INSERT INTO EVALUACION (ID_EVALUACION, ID_BITACORA, ID_EVALUADOR, TIPO_EVALUADOR, NOTA, COMENTARIOS, FECHA_EVALUACION)
-            VALUES (:id, :idBitacora, :idEvaluador, :tipo, :nota, :comentarios, :fecha)
-        `);
-
-        insertEvaluacion.run({
-            id: 1,
-            idBitacora: 1,
-            idEvaluador: 2,
-            tipo: 'TUTOR',
-            nota: 4.8,
-            comentarios: 'Excelente registro pedagógico y análisis reflexivo de la primera sesión.',
-            fecha: '2026-08-16 10:00:00',
-        });
-
-        insertEvaluacion.run({
-            id: 2,
-            idBitacora: 1,
-            idEvaluador: 5,
-            tipo: 'ASESOR',
-            nota: 4.6,
-            comentarios: 'Acompañamiento pedagógico presencial verificado y acorde con el plan de práctica.',
-            fecha: '2026-08-17 11:30:00',
-        });
-    }
-
-    // 4. Asignaciones
-    const asigCount = db.prepare('SELECT COUNT(*) AS CNT FROM ASIGNACION').get().CNT;
-    if (asigCount === 0) {
-        const insertAsignacion = db.prepare(`
-            INSERT OR IGNORE INTO ASIGNACION (ID_ASIGNACION, ID_USUARIO, ID_ESTUDIANTE, ID_TUTOR, ID_PRACTICA, ID_INSTITUCION, HORAS_ACUMULADAS, ESTADO, ESTADO_APROBACION, ESTADO_PRACTICA, FECHA_ASIGNACION)
-            VALUES (:id, :idUsuario, :idEstudiante, :idTutor, :idPractica, :idInstitucion, :horas, 'APROBADA', 'APROBADA', 'EN_CURSO', :fecha)
-        `);
-
-        insertAsignacion.run({
-            id: 1,
-            idUsuario: 3,
-            idEstudiante: 3,
-            idTutor: 4,
-            idPractica: 1,
-            idInstitucion: 1,
-            horas: 16.0,
-            fecha: '2026-08-01',
-        });
     }
 
     // 7. Preguntas Guía y Preguntas Pedagógicas
