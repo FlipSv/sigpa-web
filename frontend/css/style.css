@@ -2251,3 +2251,340 @@ table.data-table tbody tr:hover { background: #f8fafc; }
 
 
 
+
+/* ═══════════════════════════════════════════════════════════════════════
+   ESTILOS OPTIMIZADOS PARA EL PERFIL DEL ESTUDIANTE (SIGPA 2026)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Tarjeta Principal de Práctica (Hero) */
+.student-hero-card {
+    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: var(--r-lg, 14px);
+    padding: 22px 26px;
+    margin-bottom: 22px;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+.student-hero-info {
+    flex: 1;
+    min-width: 260px;
+}
+
+.student-hero-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--accent, #4f46e5);
+    background: rgba(79, 70, 229, 0.08);
+    padding: 4px 10px;
+    border-radius: 20px;
+    margin-bottom: 8px;
+}
+
+.student-hero-title {
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--text-main, #0f172a);
+    margin: 0 0 6px 0;
+}
+
+.student-hero-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    font-size: 13px;
+    color: var(--text-muted, #64748b);
+}
+
+.student-hero-meta-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* Tarjeta de Progreso Lineal */
+.student-progress-card {
+    background: #ffffff;
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: var(--r-lg, 14px);
+    padding: 22px 26px;
+    margin-bottom: 22px;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+}
+
+.student-progress-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.student-progress-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-main, #0f172a);
+}
+
+.student-progress-numbers {
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--accent, #4f46e5);
+}
+
+.student-progress-total {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-muted, #64748b);
+}
+
+/* Barra Lineal Segmentada */
+.student-segmented-bar {
+    width: 100%;
+    height: 14px;
+    background: #f1f5f9;
+    border-radius: 10px;
+    overflow: hidden;
+    display: flex;
+    position: relative;
+    margin-bottom: 14px;
+}
+
+.segment-fill-approved {
+    background: linear-gradient(90deg, #10b981, #059669);
+    height: 100%;
+    transition: width 0.5s ease;
+}
+
+.segment-fill-pending {
+    background: linear-gradient(90deg, #f59e0b, #d97706);
+    height: 100%;
+    transition: width 0.5s ease;
+}
+
+.student-progress-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 18px;
+    font-size: 12.5px;
+    color: var(--text-muted, #64748b);
+}
+
+.legend-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.legend-dot-circle {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.dot-approved { background: #10b981; }
+.dot-pending  { background: #f59e0b; }
+.dot-remaining{ background: #cbd5e1; }
+
+/* Grid de Métricas Limpias del Estudiante */
+.student-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 16px;
+    margin-bottom: 22px;
+}
+
+.student-stat-card {
+    background: #ffffff;
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: var(--r-md, 12px);
+    padding: 18px 20px;
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.03);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.student-stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+}
+
+.student-stat-icon {
+    font-size: 22px;
+    margin-bottom: 8px;
+    display: inline-block;
+}
+
+.student-stat-label {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    color: var(--text-muted, #64748b);
+    margin-bottom: 4px;
+}
+
+.student-stat-value {
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--text-main, #0f172a);
+}
+
+.student-stat-sub {
+    font-size: 12px;
+    color: var(--text-muted, #94a3b8);
+    margin-top: 2px;
+}
+
+/* Formulario Unificado de Bitácora & Plan */
+.student-form-container {
+    max-width: 880px;
+    margin: 0 auto 30px auto;
+    background: #ffffff;
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: var(--r-lg, 16px);
+    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
+    overflow: hidden;
+}
+
+.student-form-header {
+    padding: 24px 28px;
+    border-bottom: 1px solid var(--border-color, #e2e8f0);
+    background: linear-gradient(135deg, #ffffff 0%, #fbfcfe 100%);
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.student-form-body {
+    padding: 28px;
+}
+
+.form-section-block {
+    margin-bottom: 28px;
+    padding-bottom: 24px;
+    border-bottom: 1px dashed #e2e8f0;
+}
+
+.form-section-block:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+}
+
+.form-section-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.form-section-badge {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--accent, #4f46e5);
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.form-section-title {
+    font-size: 15.5px;
+    font-weight: 700;
+    color: var(--text-main, #0f172a);
+    margin: 0;
+}
+
+.form-section-tip {
+    font-size: 12.5px;
+    color: #475569;
+    background: #f8fafc;
+    border-left: 3px solid var(--accent, #4f46e5);
+    padding: 8px 14px;
+    border-radius: 0 8px 8px 0;
+    margin-bottom: 14px;
+    line-height: 1.45;
+}
+
+/* Componente de Carga de Archivos desde Dispositivo */
+.file-upload-box {
+    border: 2px dashed #cbd5e1;
+    border-radius: 12px;
+    padding: 18px 20px;
+    background: #f8fafc;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+    margin-bottom: 10px;
+}
+
+.file-upload-box:hover, .file-upload-box.dragover {
+    border-color: var(--accent, #4f46e5);
+    background: #f5f3ff;
+}
+
+.file-upload-icon {
+    font-size: 28px;
+    color: var(--accent, #4f46e5);
+    margin-bottom: 6px;
+}
+
+.file-upload-text {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--text-main, #1e293b);
+    margin-bottom: 4px;
+}
+
+.file-upload-hint {
+    font-size: 11.5px;
+    color: #64748b;
+}
+
+.file-selected-indicator {
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    background: #ecfdf5;
+    border: 1px solid #a7f3d0;
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 12.5px;
+    color: #065f46;
+    margin-top: 8px;
+}
+
+/* Indicador sutil de Autoguardado */
+.autosave-status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #64748b;
+    padding: 4px 10px;
+    border-radius: 16px;
+    background: #f1f5f9;
+}
+
+.autosave-status-pill.saved {
+    color: #059669;
+    background: #ecfdf5;
+}

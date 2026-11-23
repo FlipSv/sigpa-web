@@ -102,12 +102,18 @@ app.get('/api/test-db', async (req, res) => {
 });
 
 // ── Rutas de la API REST ───────────────────────────────────────────────
+const directorController = require('./controllers/director.controller');
 app.use('/api', authRoutes);
 app.use('/api/director', directorRoutes);
 app.use('/api/estudiante', estudianteRoutes);
 app.use('/api/tutor', tutorRoutes);
 app.use('/api/coordinador', tutorRoutes); // Compatibilidad con rutas heredadas
 app.use('/api/asesor', asesorRoutes);
+
+// ── Rutas de Compatibilidad para Generación de Reportes PDF (CU-13 / CU-15) ──
+app.post('/api/v1/reports/acta-cierre-pdf', directorController.descargarActaCierreDirecta);
+app.post('/api/v1/reports/visita-pdf', directorController.descargarReporteVisitaDirecto);
+app.get('/api/v1/reports/health', (req, res) => res.json({ status: 'healthy', service: 'reporting' }));
 
 // ── Servidor de Evidencias y Cargas Estáticas ─────────────────────────
 const uploadsDir = path.resolve(__dirname, '../uploads');

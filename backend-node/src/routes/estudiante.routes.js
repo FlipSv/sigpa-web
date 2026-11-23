@@ -22,6 +22,7 @@ router.get('/evidencias', verificarRol(['ESTUDIANTE', 'DIRECTOR', 'TUTOR', 'COOR
 router.get('/evaluaciones', verificarRol(['ESTUDIANTE', 'DIRECTOR', 'TUTOR', 'COORDINADOR', 'ASESOR']), estudianteController.getEvaluaciones);
 router.get('/preguntas_guia', verificarRol(['ESTUDIANTE', 'DIRECTOR', 'TUTOR', 'COORDINADOR', 'ASESOR']), estudianteController.getPreguntasGuia);
 router.get('/preguntas-guia/:id_practica/:visita', verificarRol(['ESTUDIANTE', 'DIRECTOR', 'TUTOR', 'COORDINADOR', 'ASESOR']), estudianteController.getPreguntasGuia);
+router.get('/preguntas-fase/:id_practica/:fase', verificarRol(['ESTUDIANTE', 'DIRECTOR', 'TUTOR', 'COORDINADOR', 'ASESOR']), estudianteController.getPreguntasGuia);
 
 // Registro de bitácoras por momentos (Estudiantes)
 router.post('/bitacora', verificarRol(['ESTUDIANTE', 'DIRECTOR']), estudianteController.registrarBitacora);
@@ -30,5 +31,8 @@ router.post('/registrar_bitacora', verificarRol(['ESTUDIANTE', 'DIRECTOR']), est
 // Carga de Evidencias Digitales
 router.post('/subir-evidencia', verificarRol(['ESTUDIANTE', 'DIRECTOR', 'TUTOR', 'COORDINADOR', 'ASESOR']), estudianteController.subirEvidencia);
 router.post('/subir_evidencia', verificarRol(['ESTUDIANTE', 'DIRECTOR', 'TUTOR', 'COORDINADOR', 'ASESOR']), estudianteController.subirEvidencia);
+
+// Generación de Código QR Efímero de Asistencia
+router.post('/generar-qr-asistencia', verificarRol(['ESTUDIANTE']), estudianteController.generarQrAsistencia);
 
 module.exports = router;

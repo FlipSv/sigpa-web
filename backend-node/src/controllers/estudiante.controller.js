@@ -161,6 +161,11 @@ async function getProgreso(req, res, next) {
         const horasFaltantes = Math.max(0, horasRequeridas - horasValidadas);
         const pctReal = horasRequeridas > 0 ? Math.min(100, Math.round((horasValidadas / horasRequeridas) * 100)) : 0;
 
+        const semaforo = pctReal >= 75 ? 'VERDE' : (pctReal >= 40 ? 'AMARILLO' : 'ROJO');
+        const hoyDate = new Date();
+        const estimacionDias = horasFaltantes > 0 ? Math.ceil((horasFaltantes / 16) * 7) : 0;
+        const fechaEstimada = new Date(hoyDate.getTime() + estimacionDias * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
         res.json({
             success: true,
             data: {
@@ -176,6 +181,8 @@ async function getProgreso(req, res, next) {
                 horasRequeridas,
                 horasRestantes: horasFaltantes,
                 porcentaje: pctReal,
+                semaforo,
+                fechaEstimadaCulminacion: fechaEstimada,
                 sesionesRealizadas: totalSesiones,
                 totalBitacoras: totalSesiones,
                 fechaUltimaSesion: bitacoras.length > 0 ? (bitacoras[bitacoras.length - 1].FECHA_REGISTRO || '') : asig.FECHA_ASIGNACION || '',
@@ -428,76 +435,95 @@ async function getEvaluaciones(req, res, next) {
 async function getPreguntasGuia(req, res, next) {
     try {
         const rawPractica = req.params.id_practica || req.query.id_practica;
-        const rawVisita   = req.params.visita || req.query.visita;
+        // Soporte dual: fase pedagógica o sesion/visita
+        const rawFase = req.params.fase || req.query.fase;
+        const rawVisita = req.params.visita || req.query.visita || req.query.sesion;
+
         if (!rawPractica) throw createError(400, 'El parámetro id_practica es obligatorio');
-        if (!rawVisita)   throw createError(400, 'El parámetro visita es obligatorio');
+        
         const idPractica = Number(rawPractica);
-        const visita = Number(rawVisita);
+        let numFase = rawFase ? Number(rawFase) : (rawVisita ? Number(rawVisita) : 1);
+        // Si el número de sesión es mayor que 4, mapear cíclicamente o por etapa a las 4 fases pedagógicas
+        if (numFase > 4) {
+            numFase = ((numFase - 1) % 4) + 1;
+        }
 
         const sql = `
-            SELECT ID_PREGUNTA, TEXTO_PREGUNTA, ORDEN
-            FROM PREGUNTA
-            WHERE ID_PRACTICA = :idPractica AND NUMERO_VISITA = :visita
+            SELECT ID_PREGUNTA, TEXTO_PREGUNTA, CATEGORIA, ORDEN
+            FROM PREGUNTA_GUIA
+            WHERE ID_PRACTICA = :idPractica AND NUMERO_VISITA = :numFase
             ORDER BY ORDEN ASC
         `;
 
         let rows = [];
         try {
-            const result = await executeQuery(sql, { idPractica, visita });
+            const result = await executeQuery(sql, { idPractica, numFase });
             rows = result.rows || [];
         } catch (e) {
-            try {
-                // Compatibilidad con tabla PREGUNTA_GUIA
-                const result = await executeQuery(`
-                    SELECT ID_PREGUNTA, TEXTO_PREGUNTA, ORDEN
-                    FROM PREGUNTA_GUIA
-                    WHERE ID_PRACTICA = :idPractica AND NUMERO_VISITA = :visita
-                    ORDER BY ORDEN ASC
-                `, { idPractica, visita });
-                rows = result.rows || [];
-            } catch (err2) {
-                rows = [];
-            }
+            rows = [];
         }
 
-        // Si no existen preguntas en BD para esa visita, proveer banco de preguntas pedagógicas UDI
+        // Si no existen preguntas en BD para esa fase, proveer banco de preguntas pedagógicas UDI
         if (rows.length === 0) {
-            const defaultPreguntas = {
-                1: [
-                    '¿Cómo caracterizas el contexto del aula y la disposición inicial de los niños frente a la propuesta didáctica?',
-                    '¿Qué estrategias de motivación y saberes previos generaron mayor enganche y participación?',
-                    '¿Qué acuerdos pedagógicos de convivencia facilitaron el desarrollo armónico de la jornada?'
-                ],
-                2: [
-                    '¿De qué manera los materiales didácticos y recursos utilizados potenciaron el aprendizaje significativo?',
-                    '¿Qué retos o imprevistos metodológicos surgieron en el aula y cómo los resolviste didácticamente?',
-                    '¿Cómo promoviste la inclusión y la participación activa de los estudiantes con ritmos diversos?'
-                ],
-                3: [
-                    '¿Qué evidencias concretas de aprendizaje formativo demostraron los niños al cierre de la sesión?',
-                    '¿Cuáles fueron tus mayores aciertos pedagógicos y qué reflexiones críticas orientan tu próxima planeación?',
-                    '¿De qué forma integraste las recomendaciones pedagógicas emitidas por tu tutor y asesor in situ?'
-                ]
+            const bancoFases = {
+                1: {
+                    faseNombre: 'Fase I: Contexto y Diagnóstico Institucional',
+                    preguntas: [
+                        { txt: '¿Cómo caracterizas el contexto del aula y la disposición socioemocional de los niños frente a la propuesta didáctica?', cat: 'CONTEXTO' },
+                        { txt: '¿Qué estrategias de motivación e indagación de saberes previos generaron mayor participación activa?', cat: 'DIDACTICA' },
+                        { txt: '¿Qué acuerdos pedagógicos de convivencia facilitaron el desarrollo armónico de la jornada?', cat: 'CONVIVENCIA' }
+                    ]
+                },
+                2: {
+                    faseNombre: 'Fase II: Planificación y Mediación Didáctica',
+                    preguntas: [
+                        { txt: '¿De qué manera los materiales didácticos y recursos lúdicos potenciaron el aprendizaje significativo?', cat: 'RECURSOS' },
+                        { txt: '¿Cómo se articularon las actividades motrices y de expresión con el plan curricular del grado?', cat: 'CURRICULO' },
+                        { txt: '¿De qué manera se retroalimentó el trabajo cooperativo y la participación de los niños?', cat: 'EVALUACION' }
+                    ]
+                },
+                3: {
+                    faseNombre: 'Fase III: Intervención en Aula e Inclusión',
+                    preguntas: [
+                        { txt: '¿Cómo se articularon los tres momentos pedagógicos (inicio, desarrollo y cierre) con el objetivo formativo?', cat: 'PLANEACION' },
+                        { txt: '¿Qué adaptaciones o mediaciones se implementaron para atender la diversidad y ritmos de aprendizaje?', cat: 'INCLUSION' },
+                        { txt: '¿Qué retos imprevistos surgieron en el aula y cómo los resolviste metodológicamente?', cat: 'MEDIACION' }
+                    ]
+                },
+                4: {
+                    faseNombre: 'Fase IV: Sistematización, Cierre y Evaluación Formativa',
+                    preguntas: [
+                        { txt: '¿Qué impacto formativo y transformador tuvo la intervención pedagógica en el grupo de infantes?', cat: 'IMPACTO' },
+                        { txt: '¿Cuáles son las reflexiones docentes y oportunidades de mejora para la futura labor profesional?', cat: 'SISTEMATIZACION' },
+                        { txt: '¿De qué forma integraste las recomendaciones pedagógicas emitidas por tu tutor y asesor in situ?', cat: 'RETROALIMENTACION' }
+                    ]
+                }
             };
 
-            const list = defaultPreguntas[visita] || [
-                '¿Cómo evaluaste el logro de los objetivos pedagógicos propuestos para esta sesión?',
-                '¿Qué adaptaciones curriculares o didácticas resultaron indispensables durante el trabajo en aula?',
-                '¿Qué aprendizajes sobre tu identidad como docente practicante te deja esta experiencia pedagógica?'
-            ];
-
-            rows = list.map((txt, idx) => ({
+            const faseObj = bancoFases[numFase] || bancoFases[1];
+            rows = faseObj.preguntas.map((p, idx) => ({
                 ID_PREGUNTA: idx + 1,
-                TEXTO_PREGUNTA: txt,
+                TEXTO_PREGUNTA: p.txt,
+                CATEGORIA: p.cat,
                 ORDEN: idx + 1,
             }));
         }
 
+        const nombresFase = {
+            1: 'Fase I: Contexto y Diagnóstico Institucional',
+            2: 'Fase II: Planificación y Mediación Didáctica',
+            3: 'Fase III: Intervención en Aula e Inclusión',
+            4: 'Fase IV: Sistematización y Evaluación Formativa'
+        };
+
         res.json({
             success: true,
+            fase: numFase,
+            faseNombre: nombresFase[numFase] || `Fase Pedagógica ${numFase}`,
             data: rows.map(r => ({
                 id: r.ID_PREGUNTA,
                 pregunta: r.TEXTO_PREGUNTA,
+                categoria: r.CATEGORIA || 'PEDAGOGICA',
                 orden: r.ORDEN,
             })),
         });
@@ -682,6 +708,77 @@ async function subirEvidencia(req, res, next) {
     }
 }
 
+/* ── POST /api/estudiante/generar-qr-asistencia ──────────────────────── */
+async function generarQrAsistencia(req, res, next) {
+    try {
+        const idEstudiante = Number(req.usuario?.id || req.body.id_estudiante);
+        if (!idEstudiante) throw createError(400, 'Identificador de estudiante requerido');
+
+        // Consultar asignación activa
+        const asigSql = `
+            SELECT a.ID_ASIGNACION, a.ID_INSTITUCION, i.NOMBRE AS INSTITUCION,
+                   u.NOMBRE || ' ' || NVL(u.APELLIDO, '') AS ESTUDIANTE
+            FROM ASIGNACION a
+            JOIN INSTITUCION i ON a.ID_INSTITUCION = i.ID_INSTITUCION
+            JOIN USUARIO u ON a.ID_ESTUDIANTE = u.ID_USUARIO
+            WHERE a.ID_ESTUDIANTE = :idEstudiante
+            AND ROWNUM = 1
+        `;
+        let asigRow;
+        try {
+            const r = await executeQuery(asigSql, { idEstudiante });
+            asigRow = r.rows && r.rows[0];
+        } catch (e) {
+            // SQLite fallback sin ROWNUM
+            const r = await executeQuery(`
+                SELECT a.ID_ASIGNACION, a.ID_INSTITUCION, i.NOMBRE AS INSTITUCION,
+                       u.NOMBRE || ' ' || NVL(u.APELLIDO, '') AS ESTUDIANTE
+                FROM ASIGNACION a
+                JOIN INSTITUCION i ON a.ID_INSTITUCION = i.ID_INSTITUCION
+                JOIN USUARIO u ON a.ID_ESTUDIANTE = u.ID_USUARIO
+                WHERE a.ID_ESTUDIANTE = :idEstudiante
+                LIMIT 1
+            `, { idEstudiante });
+            asigRow = r.rows && r.rows[0];
+        }
+
+        if (!asigRow) {
+            throw createError(404, 'No tienes una práctica o asignación activa en una institución');
+        }
+
+        const jwt = require('jsonwebtoken');
+        const { JWT_SECRET } = require('../middlewares/auth.middleware');
+
+        // Token dinámico efímero con vigencia de 15 minutos
+        const qrPayload = {
+            tipo: 'ASISTENCIA_PRESENCIAL_SIGPA',
+            idAsignacion: asigRow.ID_ASIGNACION,
+            idEstudiante,
+            idInstitucion: asigRow.ID_INSTITUCION,
+            estudiante: (asigRow.ESTUDIANTE || '').trim(),
+            institucion: asigRow.INSTITUCION,
+            fecha: new Date().toISOString().substring(0, 10),
+            timestamp: Date.now()
+        };
+
+        const qrToken = jwt.sign(qrPayload, JWT_SECRET, { expiresIn: '15m' });
+
+        res.json({
+            success: true,
+            qrToken,
+            datos: {
+                idAsignacion: asigRow.ID_ASIGNACION,
+                estudiante: (asigRow.ESTUDIANTE || '').trim(),
+                institucion: asigRow.INSTITUCION,
+                fecha: qrPayload.fecha,
+                expiraEnMinutos: 15
+            }
+        });
+    } catch (err) {
+        next(err);
+    }
+}
+
 module.exports = {
     getAsignacion,
     getProgreso,
@@ -692,5 +789,6 @@ module.exports = {
     getPreguntasGuia,
     registrarBitacora,
     subirEvidencia,
+    generarQrAsistencia,
 };
 

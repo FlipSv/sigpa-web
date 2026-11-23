@@ -74,6 +74,7 @@ async function getBitacoras(req, res, next) {
             data: result.rows.map(r => ({
                 id: r.ID_BITACORA,
                 idAsignacion: r.ID_ASIGNACION,
+                sesion: r.NUMERO_VISITA,
                 visita: r.NUMERO_VISITA,
                 fecha: r.FECHA_REGISTRO || '',
                 horas: Number(r.HORAS_SESION || 0),
@@ -126,8 +127,87 @@ async function evaluarInSitu(req, res, next) {
     }
 }
 
+/* ── POST /api/asesor/validar-asistencia-qr ─────────────────────────── */
+async function validarAsistenciaQr(req, res, next) {
+    try {
+        const { qrToken, horas } = req.body;
+        if (!qrToken) throw createError(400, 'Código QR no proporcionado');
+
+        const jwt = require('jsonwebtoken');
+        const { JWT_SECRET } = require('../middlewares/auth.middleware');
+
+        let decoded;
+        try {
+            decoded = jwt.verify(qrToken, JWT_SECRET);
+        } catch (jwtErr) {
+            if (jwtErr.name === 'TokenExpiredError') {
+                throw createError(400, 'El Código QR ha expirado (vigencia máxima 15 minutos). Solicita al estudiante generar uno nuevo.');
+            }
+            throw createError(400, 'Código QR inválido o no reconocido por SIGPA');
+        }
+
+        if (decoded.tipo !== 'ASISTENCIA_PRESENCIAL_SIGPA') {
+            throw createError(400, 'El código escaneado no corresponde a una asistencia válida');
+        }
+
+        const idAsesor = Number(req.usuario?.id || 3);
+        const horasValidar = Number(horas || 4);
+
+        // Validar institución del Asesor
+        let instAsesorId = req.usuario?.idInstitucion;
+        if (!instAsesorId) {
+            try {
+                const uRes = await executeQuery('SELECT ID_INSTITUCION FROM USUARIO WHERE ID_USUARIO = :id', { id: idAsesor });
+                instAsesorId = uRes.rows && uRes.rows[0] ? uRes.rows[0].ID_INSTITUCION : null;
+            } catch (_) {}
+        }
+
+        // Si el asesor tiene una institución específica configurada, comprobar coincidencia
+        if (instAsesorId && decoded.idInstitucion && Number(instAsesorId) !== Number(decoded.idInstitucion)) {
+            throw createError(403, `Este estudiante pertenece a otra institución educativa (${decoded.institucion || 'Otra sede'}). No tienes autorización para avalar su asistencia.`);
+        }
+
+        const fechaHoy = new Date().toISOString().substring(0, 10);
+        const horaAhora = new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
+
+        // Registrar asistencia en base de datos
+        try {
+            const insertSql = `
+                INSERT INTO ASISTENCIA (ID_ASISTENCIA, ID_ASIGNACION, ID_ESTUDIANTE, ID_INSTITUCION, ID_ASESOR, FECHA_ASISTENCIA, HORA_LLEGADA, HORAS_VALIDADAS, ESTADO_VALIDACION, TOKEN_QR)
+                VALUES ((SELECT NVL(MAX(ID_ASISTENCIA), 0) + 1 FROM ASISTENCIA), :idAsig, :idEst, :idInst, :idAsesor, :fecha, :hora, :horas, 'VALIDADA', :token)
+            `;
+            await executeQuery(insertSql, {
+                idAsig: decoded.idAsignacion,
+                idEst: decoded.idEstudiante,
+                idInst: decoded.idInstitucion,
+                idAsesor,
+                fecha: fechaHoy,
+                hora: horaAhora,
+                horas: horasValidar,
+                token: qrToken.substring(0, 40) + '...'
+            });
+        } catch (dbErr) {
+            console.warn('Aviso registrando en tabla ASISTENCIA:', dbErr.message);
+        }
+
+        res.json({
+            success: true,
+            message: `✔ Asistencia presencial confirmada con éxito para ${decoded.estudiante}`,
+            estudiante: decoded.estudiante,
+            institucion: decoded.institucion,
+            fecha: fechaHoy,
+            hora: horaAhora,
+            horas: horasValidar
+        });
+
+    } catch (err) {
+        next(err);
+    }
+}
+
 module.exports = {
     getEstudiantes,
     getBitacoras,
     evaluarInSitu,
+    validarAsistenciaQr,
 };

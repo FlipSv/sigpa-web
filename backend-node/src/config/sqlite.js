@@ -116,6 +116,18 @@ function ensureColumnExists(db, table, column, colDef) {
  * Inicializa el esquema DDL y vistas de compatibilidad
  */
 function initSchema(db) {
+    // Migración segura: si PREGUNTA existe como tabla real, migrar datos y convertir a vista
+    try {
+        const pregType = db.prepare("SELECT type FROM sqlite_master WHERE name = 'PREGUNTA'").get();
+        if (pregType && pregType.type === 'table') {
+            db.exec(`
+                INSERT OR IGNORE INTO PREGUNTA_GUIA (ID_PREGUNTA, ID_PREGUNTA_GUIA, ID_PRACTICA, ID_MODALIDAD, NUMERO_VISITA, TEXTO_PREGUNTA, CATEGORIA, ORDEN)
+                SELECT ID_PREGUNTA, ID_PREGUNTA, ID_PRACTICA, ID_PRACTICA, NUMERO_VISITA, TEXTO_PREGUNTA, CATEGORIA, ORDEN FROM PREGUNTA;
+                DROP TABLE PREGUNTA;
+            `);
+        }
+    } catch (eMigration) {}
+
     db.exec(`
         PRAGMA journal_mode = WAL;
         PRAGMA busy_timeout = 5000;
@@ -258,17 +270,7 @@ function initSchema(db) {
             FOREIGN KEY (ID_BITACORA) REFERENCES BITACORA(ID_BITACORA)
         );
 
-        -- 10. Tablas de Preguntas Pedagógicas (PREGUNTA y PREGUNTA_GUIA)
-        CREATE TABLE IF NOT EXISTS PREGUNTA (
-            ID_PREGUNTA INTEGER PRIMARY KEY,
-            ID_PRACTICA INTEGER DEFAULT 1,
-            NUMERO_VISITA INTEGER DEFAULT 1,
-            TEXTO_PREGUNTA TEXT NOT NULL,
-            CATEGORIA TEXT DEFAULT 'PEDAGOGICA',
-            ORDEN INTEGER DEFAULT 1,
-            FOREIGN KEY (ID_PRACTICA) REFERENCES PRACTICA(ID_PRACTICA)
-        );
-
+        -- 10. Tablas de Preguntas Pedagógicas (PREGUNTA_GUIA y Vista de Compatibilidad PREGUNTA)
         CREATE TABLE IF NOT EXISTS PREGUNTA_GUIA (
             ID_PREGUNTA INTEGER PRIMARY KEY,
             ID_PREGUNTA_GUIA INTEGER,
@@ -281,14 +283,52 @@ function initSchema(db) {
             FOREIGN KEY (ID_PRACTICA) REFERENCES PRACTICA(ID_PRACTICA),
             FOREIGN KEY (ID_MODALIDAD) REFERENCES MODALIDAD(ID_MODALIDAD)
         );
+
+        -- Vista de compatibilidad para evitar redundancia y garantizar sincronía total
+        DROP VIEW IF EXISTS PREGUNTA;
+        CREATE VIEW IF NOT EXISTS PREGUNTA AS
+        SELECT ID_PREGUNTA, ID_PRACTICA, NUMERO_VISITA, TEXTO_PREGUNTA, CATEGORIA, ORDEN
+        FROM PREGUNTA_GUIA;
+
+        -- 11. Tabla ASISTENCIA (Validación presencial en tiempo real por Código QR)
+        CREATE TABLE IF NOT EXISTS ASISTENCIA (
+            ID_ASISTENCIA INTEGER PRIMARY KEY,
+            ID_ASIGNACION INTEGER NOT NULL,
+            ID_ESTUDIANTE INTEGER NOT NULL,
+            ID_INSTITUCION INTEGER NOT NULL,
+            ID_ASESOR INTEGER,
+            FECHA_ASISTENCIA TEXT NOT NULL,
+            HORA_LLEGADA TEXT NOT NULL,
+            HORAS_VALIDADAS REAL DEFAULT 4,
+            ESTADO_VALIDACION TEXT DEFAULT 'VALIDADA' CHECK (ESTADO_VALIDACION IN ('VALIDADA', 'PENDIENTE', 'RECHAZADA')),
+            TOKEN_QR TEXT,
+            FOREIGN KEY (ID_ASIGNACION) REFERENCES ASIGNACION(ID_ASIGNACION),
+            FOREIGN KEY (ID_ESTUDIANTE) REFERENCES USUARIO(ID_USUARIO),
+            FOREIGN KEY (ID_INSTITUCION) REFERENCES INSTITUCION(ID_INSTITUCION)
+        );
     `);
 
     // Migraciones seguras para bases de datos existentes
-    ensureColumnExists(db, 'PREGUNTA', 'CATEGORIA', "TEXT DEFAULT 'PEDAGOGICA'");
+    ensureColumnExists(db, 'USUARIO', 'ID_INSTITUCION', "INTEGER");
+    ensureColumnExists(db, 'BITACORA', 'ID_VISITA', "INTEGER");
     ensureColumnExists(db, 'PREGUNTA_GUIA', 'CATEGORIA', "TEXT DEFAULT 'PEDAGOGICA'");
     ensureColumnExists(db, 'PREGUNTA_GUIA', 'ID_PREGUNTA_GUIA', "INTEGER");
     ensureColumnExists(db, 'PREGUNTA_GUIA', 'ID_MODALIDAD', "INTEGER");
     ensureColumnExists(db, 'PRACTICA', 'ID_MODALIDAD', "INTEGER");
+    ensureColumnExists(db, 'PRACTICA', 'ID_TUTOR', "INTEGER");
+
+    // Sincronizar vista PREGUNTA si PREGUNTA no es una vista sino tabla antigua
+    try {
+        const tableCheck = db.prepare("SELECT type FROM sqlite_master WHERE name = 'PREGUNTA'").get();
+        if (tableCheck && tableCheck.type === 'table') {
+            db.exec(`
+                INSERT OR IGNORE INTO PREGUNTA_GUIA (ID_PREGUNTA, ID_PREGUNTA_GUIA, ID_PRACTICA, ID_MODALIDAD, NUMERO_VISITA, TEXTO_PREGUNTA, CATEGORIA, ORDEN)
+                SELECT ID_PREGUNTA, ID_PREGUNTA, ID_PRACTICA, ID_PRACTICA, NUMERO_VISITA, TEXTO_PREGUNTA, CATEGORIA, ORDEN FROM PREGUNTA;
+                DROP TABLE PREGUNTA;
+                CREATE VIEW PREGUNTA AS SELECT ID_PREGUNTA, ID_PRACTICA, NUMERO_VISITA, TEXTO_PREGUNTA, CATEGORIA, ORDEN FROM PREGUNTA_GUIA;
+            `);
+        }
+    } catch (e) {}
 }
 
 /**
@@ -462,58 +502,29 @@ function seedInitialData(db) {
     }
 
     // 4. Asignaciones
-    const insertAsignacion = db.prepare(`
-        INSERT INTO ASIGNACION (ID_ASIGNACION, ID_USUARIO, ID_ESTUDIANTE, ID_TUTOR, ID_PRACTICA, ID_INSTITUCION, HORAS_ACUMULADAS, ESTADO, ESTADO_APROBACION, ESTADO_PRACTICA, FECHA_ASIGNACION)
-        VALUES (:id, :idUsuario, :idEstudiante, :idTutor, :idPractica, :idInstitucion, :horas, 'APROBADA', 'APROBADA', 'EN_CURSO', :fecha)
-    `);
+    const asigCount = db.prepare('SELECT COUNT(*) AS CNT FROM ASIGNACION').get().CNT;
+    if (asigCount === 0) {
+        const insertAsignacion = db.prepare(`
+            INSERT OR IGNORE INTO ASIGNACION (ID_ASIGNACION, ID_USUARIO, ID_ESTUDIANTE, ID_TUTOR, ID_PRACTICA, ID_INSTITUCION, HORAS_ACUMULADAS, ESTADO, ESTADO_APROBACION, ESTADO_PRACTICA, FECHA_ASIGNACION)
+            VALUES (:id, :idUsuario, :idEstudiante, :idTutor, :idPractica, :idInstitucion, :horas, 'APROBADA', 'APROBADA', 'EN_CURSO', :fecha)
+        `);
 
-    insertAsignacion.run({
-        id: 1,
-        idUsuario: 3,
-        idEstudiante: 3,
-        idTutor: 4,
-        idPractica: 1,
-        idInstitucion: 1,
-        horas: 16.0,
-        fecha: '2026-08-01',
-    });
+        insertAsignacion.run({
+            id: 1,
+            idUsuario: 3,
+            idEstudiante: 3,
+            idTutor: 4,
+            idPractica: 1,
+            idInstitucion: 1,
+            horas: 16.0,
+            fecha: '2026-08-01',
+        });
+    }
 
-    // 5. Bitácoras
-    const insertBitacora = db.prepare(`
-        INSERT INTO BITACORA (ID_BITACORA, ID_ASIGNACION, NUMERO_VISITA, FECHA_REGISTRO, HORAS_SESION, ACTIVIDADES, OBSERVACIONES, URL_EVIDENCIA, ESTADO_REVISION)
-        VALUES (:id, :idAsignacion, :visita, :fecha, :horas, :actividades, :observaciones, :evidencia, :estado)
-    `);
-
-    // 10. Banco de Preguntas Guía Pedagógicas (PREGUNTA y PREGUNTA_GUIA)
-    const insertPregunta = db.prepare(`
-        INSERT OR IGNORE INTO PREGUNTA (ID_PREGUNTA, ID_PRACTICA, NUMERO_VISITA, TEXTO_PREGUNTA, CATEGORIA, ORDEN)
-        VALUES (:id, :idPractica, :visita, :texto, :categoria, :orden)
-    `);
-
-    insertEvaluacion.run({
-        id: 1,
-        idBitacora: 1,
-        idEvaluador: 4,
-        tipo: 'TUTOR',
-        nota: 4.8,
-        comentarios: 'Excelente registro pedagógico y análisis reflexivo de la primera sesión.',
-        fecha: '2026-08-16 10:00:00',
-    });
-
-    insertEvaluacion.run({
-        id: 2,
-        idBitacora: 1,
-        idEvaluador: 5,
-        tipo: 'ASESOR',
-        nota: 4.6,
-        comentarios: 'Acompañamiento pedagógico presencial verificado y acorde con el plan de práctica.',
-        fecha: '2026-08-17 11:30:00',
-    });
-
-    // 7. Preguntas Guía
-    const insertPregunta = db.prepare(`
-        INSERT INTO PREGUNTA (ID_PREGUNTA, ID_PRACTICA, NUMERO_VISITA, TEXTO_PREGUNTA, ORDEN)
-        VALUES (:id, :idPractica, :visita, :texto, :orden)
+    // 7. Preguntas Guía y Preguntas Pedagógicas
+    const insertPreguntaGuia = db.prepare(`
+        INSERT OR IGNORE INTO PREGUNTA_GUIA (ID_PREGUNTA, ID_PREGUNTA_GUIA, ID_PRACTICA, ID_MODALIDAD, NUMERO_VISITA, TEXTO_PREGUNTA, CATEGORIA, ORDEN)
+        VALUES (:id, :id, :idPractica, :idMod, :visita, :texto, :categoria, :orden)
     `);
 
     const bancoPreguntas = [
@@ -534,14 +545,6 @@ function seedInitialData(db) {
     ];
 
         for (const q of bancoPreguntas) {
-            insertPregunta.run({
-                id: q.id,
-                idPractica: q.idPractica,
-                visita: q.visita,
-                texto: q.texto,
-                categoria: q.categoria,
-                orden: q.orden,
-            });
             insertPreguntaGuia.run({
                 id: q.id,
                 idPractica: q.idPractica,

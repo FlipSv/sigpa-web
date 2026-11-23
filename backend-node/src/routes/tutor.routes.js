@@ -17,6 +17,7 @@ router.get('/asignaciones', tutorController.getAsignaciones);
 router.get('/estudiantes', tutorController.getAsignaciones);
 router.get('/bitacoras', tutorController.getBitacoras);
 router.get('/bitacoras_pendientes', tutorController.getBitacoras);
+router.get('/banco-preguntas', tutorController.getBancoPreguntasTutor);
 
 router.post('/calificar', tutorController.calificarBitacora);
 router.post('/aprobar_asignacion', tutorController.aprobarAsignacion);

@@ -18,5 +18,6 @@ router.get('/asignaciones', asesorController.getEstudiantes);
 router.get('/bitacoras', asesorController.getBitacoras);
 
 router.post('/evaluar', asesorController.evaluarInSitu);
+router.post('/validar-asistencia-qr', asesorController.validarAsistenciaQr);
 
 module.exports = router;

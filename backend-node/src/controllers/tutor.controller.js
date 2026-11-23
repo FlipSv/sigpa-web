@@ -74,14 +74,20 @@ async function getBitacoras(req, res, next) {
             JOIN USUARIO u ON a.ID_ESTUDIANTE = u.ID_USUARIO
             JOIN PRACTICA p ON a.ID_PRACTICA = p.ID_PRACTICA
             LEFT JOIN INSTITUCION i ON a.ID_INSTITUCION = i.ID_INSTITUCION
-            LEFT JOIN EVALUACION e ON e.ID_EVALUACION = (
-                SELECT MAX(et.ID_EVALUACION) FROM EVALUACION et
-                WHERE et.ID_BITACORA = b.ID_BITACORA AND et.TIPO_EVALUADOR = 'TUTOR'
-            )
-            LEFT JOIN EVALUACION av ON av.ID_EVALUACION = (
-                SELECT MAX(ea.ID_EVALUACION) FROM EVALUACION ea
-                WHERE ea.ID_BITACORA = b.ID_BITACORA AND ea.TIPO_EVALUADOR = 'ASESOR'
-            )
+            LEFT JOIN (
+                SELECT ID_BITACORA, MAX(ID_EVALUACION) AS MAX_EVAL
+                FROM EVALUACION
+                WHERE TIPO_EVALUADOR = 'TUTOR'
+                GROUP BY ID_BITACORA
+            ) me ON me.ID_BITACORA = b.ID_BITACORA
+            LEFT JOIN EVALUACION e ON e.ID_EVALUACION = me.MAX_EVAL
+            LEFT JOIN (
+                SELECT ID_BITACORA, MAX(ID_EVALUACION) AS MAX_EVAL
+                FROM EVALUACION
+                WHERE TIPO_EVALUADOR = 'ASESOR'
+                GROUP BY ID_BITACORA
+            ) ma ON ma.ID_BITACORA = b.ID_BITACORA
+            LEFT JOIN EVALUACION av ON av.ID_EVALUACION = ma.MAX_EVAL
             WHERE (a.ID_TUTOR = :idTutor1 OR :idTutor2 = 0)
               AND (:practica = 0 OR p.ID_PRACTICA = :idPractica)
             ORDER BY b.ID_BITACORA DESC
@@ -97,6 +103,7 @@ async function getBitacoras(req, res, next) {
                 id: r.ID_BITACORA,
                 idAsignacion: r.ID_ASIGNACION,
                 idPractica: r.ID_PRACTICA,
+                sesion: r.NUMERO_VISITA,
                 visita: r.NUMERO_VISITA,
                 fecha: r.FECHA_REGISTRO || '',
                 horas: Number(r.HORAS_SESION || 0),
@@ -210,11 +217,54 @@ async function aprobarAsignacion(req, res, next) {
     }
 }
 
+/* ── GET /api/tutor/banco-preguntas ───────────────────────────────────── */
+async function getBancoPreguntasTutor(req, res, next) {
+    try {
+        const idPractica = Number(req.query.id_practica || 1);
+        const sql = `
+            SELECT ID_PREGUNTA, ID_PRACTICA, NUMERO_VISITA AS FASE, TEXTO_PREGUNTA, CATEGORIA, ORDEN
+            FROM PREGUNTA_GUIA
+            WHERE ID_PRACTICA = :idPractica
+            ORDER BY NUMERO_VISITA ASC, ORDEN ASC
+        `;
+        let rows = [];
+        try {
+            const result = await executeQuery(sql, { idPractica });
+            rows = result.rows || [];
+        } catch (e) {
+            rows = [];
+        }
+
+        const fasesInfo = [
+            { fase: 1, titulo: 'Fase I: Contexto y Diagnóstico Institucional', descripcion: 'Exploración inicial, observación del entorno escolar y convivencia' },
+            { fase: 2, titulo: 'Fase II: Planificación y Mediación Didáctica', descripcion: 'Diseño curricular, preparación de recursos y mediación didáctica' },
+            { fase: 3, titulo: 'Fase III: Intervención en Aula e Inclusión', descripcion: 'Ejecución de actividades, dinámicas grupales y atención a la diversidad' },
+            { fase: 4, titulo: 'Fase IV: Sistematización y Evaluación Formativa', descripcion: 'Impacto transformador, lecciones aprendidas y cierre pedagógico' },
+        ];
+
+        res.json({
+            success: true,
+            fases: fasesInfo,
+            preguntas: rows.map(r => ({
+                id: r.ID_PREGUNTA,
+                idPractica: r.ID_PRACTICA,
+                fase: r.FASE,
+                pregunta: r.TEXTO_PREGUNTA,
+                categoria: r.CATEGORIA || 'PEDAGOGICA',
+                orden: r.ORDEN
+            }))
+        });
+    } catch (err) {
+        next(err);
+    }
+}
+
 module.exports = {
     getAsignaciones,
     getBitacoras,
     calificarBitacora,
     aprobarAsignacion,
+    getBancoPreguntasTutor,
     cerrarAsignacion: cerrarPractica,
     cerrarPractica,
 };

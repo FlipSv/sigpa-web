@@ -36,8 +36,13 @@ async function runSetup() {
             `ALTER TABLE USUARIO MODIFY (CONTRASENA VARCHAR2(255))`,
             `ALTER TABLE USUARIO ADD (SEMESTRE NUMBER CHECK (SEMESTRE IN (1, 2, 3)))`,
             `ALTER TABLE PRACTICA ADD (DESCRIPCION VARCHAR2(500))`,
+            `ALTER TABLE PRACTICA ADD (ID_MODALIDAD NUMBER(10))`,
+            `ALTER TABLE PRACTICA ADD (SEMESTRE NUMBER(2) DEFAULT 1)`,
+            `ALTER TABLE PRACTICA ADD (TIPO VARCHAR2(30) DEFAULT 'OBSERVACION')`,
+            `ALTER TABLE PRACTICA ADD (HORAS_REQUERIDAS NUMBER(4) DEFAULT 64)`,
             `ALTER TABLE INSTITUCION ADD (FECHA_VENC_CONVENIO DATE)`,
             `ALTER TABLE PRACTICA ADD (ID_INSTITUCION NUMBER(10) REFERENCES INSTITUCION(ID_INSTITUCION))`,
+            `ALTER TABLE PRACTICA ADD (ID_TUTOR NUMBER(10) REFERENCES USUARIO(ID_USUARIO))`,
             `ALTER TABLE ASIGNACION MODIFY (ID_USUARIO NULL)`,
             `ALTER TABLE ASIGNACION ADD (ID_ESTUDIANTE NUMBER(10))`,
             `ALTER TABLE ASIGNACION ADD (ID_TUTOR NUMBER(10))`,
@@ -47,6 +52,14 @@ async function runSetup() {
             `ALTER TABLE BITACORA ADD (HORAS_SESION NUMBER(5,2) DEFAULT 16)`,
             `ALTER TABLE BITACORA ADD (URL_EVIDENCIA VARCHAR2(200))`,
             `ALTER TABLE BITACORA ADD (ESTADO_REVISION VARCHAR2(20) DEFAULT 'PENDIENTE')`,
+            `ALTER TABLE BITACORA ADD (ID_VISITA NUMBER(10))`,
+            `ALTER TABLE USUARIO ADD (ID_INSTITUCION NUMBER(10))`,
+            `ALTER TABLE VISITA ADD (ID_ASIGNACION NUMBER(10))`,
+            `ALTER TABLE VISITA ADD (ID_PRACTICA NUMBER(10))`,
+            `ALTER TABLE PREGUNTA_GUIA ADD (CATEGORIA VARCHAR2(100) DEFAULT 'PEDAGOGICA')`,
+            `ALTER TABLE PREGUNTA_GUIA ADD (ORDEN NUMBER(4) DEFAULT 1)`,
+            `ALTER TABLE PREGUNTA_GUIA ADD (ID_MODALIDAD NUMBER(10))`,
+            `ALTER TABLE PREGUNTA_GUIA ADD (ID_PREGUNTA_GUIA NUMBER(10))`,
         ];
 
         console.log('\nSincronizando columnas del esquema en Oracle...');
@@ -89,6 +102,33 @@ async function runSetup() {
             await executeQuery(`UPDATE ASIGNACION SET ID_ESTUDIANTE = ID_USUARIO WHERE ID_ESTUDIANTE IS NULL`);
             await executeQuery(`UPDATE ASIGNACION SET ID_USUARIO = ID_ESTUDIANTE WHERE ID_USUARIO IS NULL`);
         } catch (e) {}
+
+        // Asegurar vista de compatibilidad PREGUNTA sobre PREGUNTA_GUIA
+        try {
+            // Verificar si PREGUNTA es una tabla en lugar de una vista
+            const objRes = await executeQuery(`SELECT OBJECT_TYPE FROM USER_OBJECTS WHERE OBJECT_NAME = 'PREGUNTA'`);
+            if (objRes.rows && objRes.rows.length > 0 && objRes.rows[0].OBJECT_TYPE === 'TABLE') {
+                // Migrar cualquier pregunta huérfana de PREGUNTA a PREGUNTA_GUIA antes de reemplazarla por la vista
+                await executeQuery(`
+                    MERGE INTO PREGUNTA_GUIA g
+                    USING PREGUNTA p
+                    ON (g.ID_PREGUNTA = p.ID_PREGUNTA)
+                    WHEN NOT MATCHED THEN
+                        INSERT (ID_PREGUNTA, ID_PREGUNTA_GUIA, ID_PRACTICA, ID_MODALIDAD, NUMERO_VISITA, TEXTO_PREGUNTA, CATEGORIA, ORDEN)
+                        VALUES (p.ID_PREGUNTA, p.ID_PREGUNTA, p.ID_PRACTICA, p.ID_PRACTICA, p.NUMERO_VISITA, p.TEXTO_PREGUNTA, NVL(p.CATEGORIA, 'PEDAGOGICA'), NVL(p.ORDEN, 1))
+                `);
+                await executeQuery(`DROP TABLE PREGUNTA CASCADE CONSTRAINTS`);
+                console.log('  ✔ Tabla antigua PREGUNTA migrada a PREGUNTA_GUIA.');
+            }
+            await executeQuery(`
+                CREATE OR REPLACE VIEW PREGUNTA AS
+                SELECT ID_PREGUNTA, ID_PRACTICA, NUMERO_VISITA, TEXTO_PREGUNTA, CATEGORIA, ORDEN
+                FROM PREGUNTA_GUIA
+            `);
+            console.log('  ✔ Vista de compatibilidad PREGUNTA sincronizada con éxito.');
+        } catch (vErr) {
+            console.warn('  ℹ️  Aviso al sincronizar vista PREGUNTA:', vErr.message);
+        }
 
         // Listar tablas y columnas
         const tablesRes = await executeQuery('SELECT TABLE_NAME FROM USER_TABLES ORDER BY TABLE_NAME');
